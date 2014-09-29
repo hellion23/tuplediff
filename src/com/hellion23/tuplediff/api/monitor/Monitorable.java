@@ -5,5 +5,6 @@ package com.hellion23.tuplediff.api.monitor;
  */
 public interface Monitorable {
     public void setMonitor(Monitor monitor);
-    public void stop (boolean isNormal);
+    public void stop ();
+    public boolean isStopped();
 }

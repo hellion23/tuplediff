@@ -5,7 +5,16 @@ package com.hellion23.tuplediff.api;
  * Date: 6/3/14
  */
 public class Tuple {
-    public Schema getSchema() {return null;}
+    Schema schema;
+
+    public Schema getSchema() {
+        return schema;
+    }
+
+    public void setSchema(Schema schema) {
+        this.schema = schema;
+    }
+
     public Comparable get (String fieldName) {
         return null;
     }
@@ -19,5 +28,8 @@ public class Tuple {
         return null;
     }
 
+    public void fullyPopulate() {
+
+    }
 }
 
