@@ -17,5 +17,4 @@ public interface TupleStream extends Nameable, Monitorable {
     public Tuple getNext();
     public void close();
     public boolean isClosed();
-
 }

@@ -15,6 +15,7 @@ import java.util.logging.Logger;
  */
 public class TupleComparison implements Nameable, Monitorable
 {
+
     private static final Logger logger = Logger.getLogger(TupleComparison.class.getName());
     String name;
     ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2);
@@ -39,7 +40,7 @@ public class TupleComparison implements Nameable, Monitorable
     public ComparisonResult compare () {
         assert(!alreadyRun);
         try {
-            monitor.handleEvent(this, Monitor.STARTED);
+            monitor.handleEvent(this, STATE.STARTING, null);
             leftStream.setTupleKey(key);
             leftStream.setName("LEFT STREAM");
             leftStream.init();
@@ -59,16 +60,19 @@ public class TupleComparison implements Nameable, Monitorable
             executor.execute(new StreamRunnable(rightStream));
 
             compareTuples();
-
+            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.COMPLETED);
         }
         catch (Exception ex) {
             logger.severe(getName() + " encountered exception comparing " + ex.getMessage());
-            monitor.handleEvent(this, Monitor.FAILED, ex);
+            if (!isStopped()) {
+                // Exceptions that occur after comparison has already stopped are ignored.
+                monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, ex);
+            }
+
         }
         finally {
             alreadyRun = true;
-            monitor.handleEvent(this, Monitor.ENDED);
-            monitor.reportResults(result);
+            result.setStats(monitor.getAllStats());
         }
         return result;
     }
@@ -78,46 +82,46 @@ public class TupleComparison implements Nameable, Monitorable
         while (shouldCompare) {
             if (leftStream.hasNext() && rightStream.hasNext()) {
                 left = leftStream.getNext();
-                handleComparisonEvent (CompareEvent.TYPE.DATA_LEFT, left, null, null);
+                comparisonEvent(CompareEvent.TYPE.DATA_LEFT, left, null, null);
                 right = rightStream.getNext();
-                handleComparisonEvent (CompareEvent.TYPE.DATA_RIGHT, null, right, null);
+                comparisonEvent(CompareEvent.TYPE.DATA_RIGHT, null, right, null);
                 while (shouldCompare) {
                     int comp = left.getKey().compareTo(right.getKey());
                     if (comp == 0) {
                         List <String> breakFields = compareRows (left, right);
                         if (breakFields != null) {
-                            handleComparisonEvent (CompareEvent.TYPE.PAIR_BREAK, left, right, breakFields);
+                            comparisonEvent(CompareEvent.TYPE.PAIR_BREAK, left, right, breakFields);
                         }
                         else {
-                            monitor.handleEvent(this, Monitor.TUPLE_PAIR_MATCHED);
+                            comparisonEvent(CompareEvent.TYPE.PAIR_MATCHED, left, right, null);
                         }
-                        if (leftStream.hasNext() && rightStream.hasNext()) {
+                        if ( leftStream.hasNext() && rightStream.hasNext()) {
                             left = leftStream.getNext();
-                            handleComparisonEvent (CompareEvent.TYPE.DATA_LEFT, left, null, null);
+                            comparisonEvent(CompareEvent.TYPE.DATA_LEFT, left, null, null);
                             right = rightStream.getNext();
-                            handleComparisonEvent (CompareEvent.TYPE.DATA_RIGHT, null, right, null);
+                            comparisonEvent(CompareEvent.TYPE.DATA_RIGHT, null, right, null);
                         }
                         else break;
                     }
                     else if (comp < 0) {
-                        handleComparisonEvent (CompareEvent.TYPE.LEFT_BREAK, left, null, null);
-                        if (leftStream.hasNext()) {
+                        comparisonEvent(CompareEvent.TYPE.LEFT_BREAK, left, null, null);
+                        if ( leftStream.hasNext()) {
                             left = leftStream.getNext();
-                            handleComparisonEvent (CompareEvent.TYPE.DATA_LEFT, left, null, null);
+                            comparisonEvent(CompareEvent.TYPE.DATA_LEFT, left, null, null);
                         }
                         else {
-                            handleComparisonEvent (CompareEvent.TYPE.PAIR_BREAK, null, right, null);
+                            comparisonEvent(CompareEvent.TYPE.PAIR_BREAK, null, right, null);
                             break;
                         }
                     }
                     else {
-                        handleComparisonEvent (CompareEvent.TYPE.RIGHT_BREAK, null, right, null);
+                        comparisonEvent(CompareEvent.TYPE.RIGHT_BREAK, null, right, null);
                         if (rightStream.hasNext()) {
                             right = rightStream.getNext();
-                            handleComparisonEvent (CompareEvent.TYPE.DATA_RIGHT, null, right, null);
+                            comparisonEvent(CompareEvent.TYPE.DATA_RIGHT, null, right, null);
                         }
                         else {
-                            handleComparisonEvent (CompareEvent.TYPE.LEFT_BREAK, left, null, null);
+                            comparisonEvent(CompareEvent.TYPE.LEFT_BREAK, left, null, null);
                             break;
                         }
                     }
@@ -126,52 +130,32 @@ public class TupleComparison implements Nameable, Monitorable
 
             while (shouldCompare && leftStream.hasNext()) {
                 left = leftStream.getNext();
-                handleComparisonEvent (CompareEvent.TYPE.DATA_LEFT, left, null, null);
-                monitor.handleEvent(this, Monitor.TUPLE_LEFT_BREAK);
-                handleComparisonEvent (CompareEvent.TYPE.LEFT_BREAK, left, null, null);
+                comparisonEvent(CompareEvent.TYPE.DATA_LEFT, left, null, null);
+                comparisonEvent(CompareEvent.TYPE.LEFT_BREAK, left, null, null);
             }
 
             while (shouldCompare && rightStream.hasNext()) {
                 right = rightStream.getNext();
-                handleComparisonEvent (CompareEvent.TYPE.DATA_RIGHT, null, right, null);
-                monitor.handleEvent(this, Monitor.TUPLE_RIGHT_BREAK);
-                handleComparisonEvent (CompareEvent.TYPE.RIGHT_BREAK, null, right, null);
+                comparisonEvent(CompareEvent.TYPE.DATA_RIGHT, null, right, null);
+                comparisonEvent(CompareEvent.TYPE.RIGHT_BREAK, null, right, null);
             }
         }
     }
 
-    protected void handleComparisonEvent (CompareEvent.TYPE event, Tuple left, Tuple right, List<String> breakFields) {
+    protected void comparisonEvent (CompareEvent.TYPE event, Tuple left, Tuple right, List<String> breakFields) {
+        monitor.handleEvent(this, STATE.RUNNING, event);
         switch (event) {
             case DATA_LEFT:
-                monitor.handleEvent(this, Monitor.TUPLE_LEFT_SEEN);
-                break;
             case DATA_RIGHT:
-                monitor.handleEvent(this, Monitor.TUPLE_RIGHT_SEEN);
-                break;
             case PAIR_MATCHED:
-                monitor.handleEvent(this, Monitor.TUPLE_PAIR_MATCHED, left, right, null);
                 break;
             case PAIR_BREAK:
-                monitor.handleEvent(this, Monitor.TUPLE_PAIR_BREAK);
-                storeEvent(new CompareEvent(event, left, right, breakFields));
-                break;
             case LEFT_BREAK:
-                monitor.handleEvent(this, Monitor.TUPLE_LEFT_BREAK);
-                storeEvent(new CompareEvent(event, left, null, null));
-                break;
             case RIGHT_BREAK:
-                monitor.handleEvent(this, Monitor.TUPLE_RIGHT_BREAK);
-                storeEvent(new CompareEvent(event, null, right, null));
+                result.addComparisonEvent(new CompareEvent (event, left, right, breakFields));
                 break;
         }
 
-    }
-
-    private void storeEvent (CompareEvent event) {
-        if (event.leftTuple!=null) {
-            event.leftTuple.fullyPopulate();
-        }
-        result.addComparisonEvent(event);
     }
 
     private List<String> compareRows(Tuple left, Tuple right) {
@@ -198,8 +182,15 @@ public class TupleComparison implements Nameable, Monitorable
         this.monitor = monitor;
     }
 
+    public void cancel () {
+        stop();
+        monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.CANCEL);
+
+    }
+
     @Override
     public void stop() {
+
         shouldCompare = false;
     }
 

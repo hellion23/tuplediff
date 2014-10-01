@@ -24,4 +24,44 @@ public class Config implements Nameable {
     public String getName() {
         return this.name;
     }
+
+    public TupleStream getLeftStream() {
+        return leftStream;
+    }
+
+    public void setLeftStream(TupleStream leftStream) {
+        this.leftStream = leftStream;
+    }
+
+    public TupleStream getRightStream() {
+        return rightStream;
+    }
+
+    public void setRightStream(TupleStream rightStream) {
+        this.rightStream = rightStream;
+    }
+
+    public TupleKey getTupleKey() {
+        return tupleKey;
+    }
+
+    public void setTupleKey(TupleKey tupleKey) {
+        this.tupleKey = tupleKey;
+    }
+
+    public Monitor getMonitor() {
+        return monitor;
+    }
+
+    public void setMonitor(Monitor monitor) {
+        this.monitor = monitor;
+    }
+
+    public CompareEventListener getCompareEventListener() {
+        return compareEventListener;
+    }
+
+    public void setCompareEventListener(CompareEventListener compareEventListener) {
+        this.compareEventListener = compareEventListener;
+    }
 }
