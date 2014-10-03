@@ -1,9 +1,5 @@
 package com.hellion23.tuplediff.api;
 
-import com.hellion23.tuplediff.api.db.SqlSchema;
-
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -18,6 +14,7 @@ public class Tuple {
     public Tuple(Schema schema, Map<Field, Comparable> row) {
         this.schema = schema;
         this.fieldToValues = row;
+        key = schema.getTupleStreamKey().createKeyForTuple(this);
     }
 
     public Schema getSchema() {

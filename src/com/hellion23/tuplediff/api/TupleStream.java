@@ -8,8 +8,8 @@ import com.hellion23.tuplediff.api.monitor.Nameable;
  * Date: 6/3/14
  */
 public interface TupleStream extends Nameable, Monitorable {
-    public TupleKey getTupleKey();
-    public void setTupleKey(TupleKey key);
+    public TupleStreamKey getTupleStreamKey();
+    public void setTupleStreamKey(TupleStreamKey key);
     public void init();
     public void open();
     public Schema getSchema();

@@ -10,7 +10,7 @@ import com.hellion23.tuplediff.api.monitor.Nameable;
 public class Config implements Nameable {
     TupleStream leftStream;
     TupleStream rightStream;
-    TupleKey tupleKey;
+    TupleStreamKey tupleStreamKey;
     Monitor monitor;
     String name;
     CompareEventListener compareEventListener;
@@ -41,12 +41,12 @@ public class Config implements Nameable {
         this.rightStream = rightStream;
     }
 
-    public TupleKey getTupleKey() {
-        return tupleKey;
+    public TupleStreamKey getTupleStreamKey() {
+        return tupleStreamKey;
     }
 
-    public void setTupleKey(TupleKey tupleKey) {
-        this.tupleKey = tupleKey;
+    public void setTupleStreamKey(TupleStreamKey tupleStreamKey) {
+        this.tupleStreamKey = tupleStreamKey;
     }
 
     public Monitor getMonitor() {

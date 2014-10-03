@@ -20,7 +20,7 @@ public class TupleComparison implements Nameable, Monitorable
     String name;
     ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2);
     TupleStream leftStream, rightStream;
-    TupleKey key;
+    TupleStreamKey key;
     CompareEventListener compareEventListener;
     Monitor monitor;
     boolean alreadyRun = false;
@@ -28,7 +28,7 @@ public class TupleComparison implements Nameable, Monitorable
     ComparisonResult result;
 
     public TupleComparison (Config config) {
-        key = config.tupleKey;
+        key = config.tupleStreamKey;
         leftStream = config.leftStream;
         rightStream = config.rightStream;
         compareEventListener = config.compareEventListener;
@@ -41,10 +41,10 @@ public class TupleComparison implements Nameable, Monitorable
         assert(!alreadyRun);
         try {
             monitor.handleEvent(this, STATE.STARTING, null);
-            leftStream.setTupleKey(key);
+            leftStream.setTupleStreamKey(key);
             leftStream.setName("LEFT STREAM");
             leftStream.init();
-            rightStream.setTupleKey(key);
+            rightStream.setTupleStreamKey(key);
             leftStream.setName("RIGHT STREAM");
             rightStream.init();
 
