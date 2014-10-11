@@ -6,12 +6,12 @@ import java.util.Map;
  * @author: Hermann Leung
  * Date: 6/3/14
  */
-public class Tuple {
+public class Tuple <T extends Field> {
     Schema schema;
-    Map<Field, Comparable> fieldToValues;
+    Map<T, Comparable> fieldToValues;
     Comparable key;
 
-    public Tuple(Schema schema, Map<Field, Comparable> row) {
+    public Tuple(Schema schema, Map<T, Comparable> row) {
         this.schema = schema;
         this.fieldToValues = row;
         key = schema.getTupleStreamKey().createKeyForTuple(this);
@@ -33,10 +33,10 @@ public class Tuple {
         this.key = key;
     }
 
-    public Comparable getValue (Field f) {
+    public Comparable getValue (T f) {
         return fieldToValues.get(f);
     }
 
-    public Map<Field, Comparable> getAllValues () { return fieldToValues; }
+    public Map<T, Comparable> getAllValues () { return fieldToValues; }
 }
 

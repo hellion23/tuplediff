@@ -4,6 +4,10 @@ import com.hellion23.tuplediff.api.listener.CompareEventListener;
 import com.hellion23.tuplediff.api.monitor.Monitor;
 import com.hellion23.tuplediff.api.monitor.Nameable;
 
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Created by Hermann on 9/28/2014.
  */
@@ -14,6 +18,8 @@ public class Config implements Nameable {
     Monitor monitor;
     String name;
     CompareEventListener compareEventListener;
+    Map<Field, Comparator<Comparable>> fieldComparatorOverrides = new HashMap<Field, Comparator<Comparable>>();
+    Map<Class, Comparator<Comparable>> classComparatorOverrides = new HashMap<Class, Comparator<Comparable>>();
 
     @Override
     public void setName(String name) {
@@ -64,4 +70,6 @@ public class Config implements Nameable {
     public void setCompareEventListener(CompareEventListener compareEventListener) {
         this.compareEventListener = compareEventListener;
     }
+
+
 }

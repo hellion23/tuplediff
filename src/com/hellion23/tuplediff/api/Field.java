@@ -6,7 +6,7 @@ import com.hellion23.tuplediff.api.monitor.Nameable;
  * @author: Hermann Leung
  * Date: 6/3/14
  */
-public class Field implements Nameable{
+public class Field implements Nameable, Comparable <Field> {
     protected String name;
     protected Class fieldClass;
     protected String expression;
@@ -33,5 +33,13 @@ public class Field implements Nameable{
 
     public void setFieldClass(Class fieldClass) {
         this.fieldClass = fieldClass;
+    }
+
+    @Override
+    public final int compareTo(Field field) {
+        if (field == null) return -1;
+        else {
+            return name.compareTo(field.getName());
+        }
     }
 }

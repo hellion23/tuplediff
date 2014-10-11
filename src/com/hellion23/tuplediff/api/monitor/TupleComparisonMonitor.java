@@ -116,7 +116,6 @@ public class TupleComparisonMonitor implements Monitor {
             return totalBreaks;
         }
 
-
         public int getTotalMatched() {
             return totalMatched;
         }

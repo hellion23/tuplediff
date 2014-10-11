@@ -21,4 +21,36 @@ public class CompareEvent {
         this.rightTuple = rightTuple;
         this.breakFields = breakFields;
     }
+
+    public TYPE getType() {
+        return type;
+    }
+
+    public void setType(TYPE type) {
+        this.type = type;
+    }
+
+    public Tuple getLeftTuple() {
+        return leftTuple;
+    }
+
+    public void setLeftTuple(Tuple leftTuple) {
+        this.leftTuple = leftTuple;
+    }
+
+    public Tuple getRightTuple() {
+        return rightTuple;
+    }
+
+    public void setRightTuple(Tuple rightTuple) {
+        this.rightTuple = rightTuple;
+    }
+
+    public List<String> getBreakFields() {
+        return breakFields;
+    }
+
+    public void setBreakFields(List<String> breakFields) {
+        this.breakFields = breakFields;
+    }
 }

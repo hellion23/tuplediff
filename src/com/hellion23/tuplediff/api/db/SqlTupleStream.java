@@ -17,7 +17,6 @@ public class SqlTupleStream implements TupleStream {
     String name;
     Monitor monitor;
     boolean stopped = false;
-    boolean streamFinished = false;
     Connection connection;
     String sql;
     String querySql;
@@ -25,7 +24,9 @@ public class SqlTupleStream implements TupleStream {
     ResultSet rs;
     SqlSchema schema;
     TupleStreamKey tupleStreamKey;
+    int bufferSize = 50;
     LinkedBlockingQueue <Tuple> buffer = new LinkedBlockingQueue<Tuple>();
+    boolean initialized = false;
 
     public static SqlTupleStream create (Connection connection) {
         try {
@@ -55,18 +56,24 @@ public class SqlTupleStream implements TupleStream {
 
     @Override
     public void init() {
+        if(initialized) return;
         try {
-            monitor.handleEvent(this, STATE.STARTING);
-            schema = initSchema();
+            monitor.handleEvent(this, STATE.STARTING, "INIT_START");
+            if (schema == null) {
+                schema = getSchemaFor(tupleStreamKey, connection, sql);
+            }
             querySql = initQuerySql();
             stmt = connection.prepareStatement(querySql);
+            initialized = true;
+            monitor.handleEvent(this, STATE.RUNNING, "INIT_END");
         }
-        catch (Exception e) {
+        catch (SQLException e) {
             monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, e);
         }
     }
 
-    protected SqlSchema initSchema () throws SQLException{
+    public static SqlSchema getSchemaFor (TupleStreamKey tupleStreamKey, Connection connection, String sql)
+            throws SQLException{
 
         final PreparedStatement stmt = connection.prepareStatement(sql);
         final ResultSetMetaData rsmd = stmt.getMetaData();
@@ -95,7 +102,7 @@ public class SqlTupleStream implements TupleStream {
                 }
             }
             if (!found) {
-                throw new RuntimeException(name + " Could not find Tuple Key " + lookFor + " amongst these fields: " + allFields);
+                throw new RuntimeException(" Could not find Tuple Key " + lookFor + " amongst these fields: " + allFields);
             }
         }
 
@@ -105,7 +112,7 @@ public class SqlTupleStream implements TupleStream {
         return schema ;
     }
 
-    protected String extractColumnName (String string) {
+    protected static String extractColumnName (String string) {
         int i = string.indexOf('.');
         if (i < 0) {
             return string.toUpperCase();
@@ -138,7 +145,7 @@ public class SqlTupleStream implements TupleStream {
         try {
             monitor.handleEvent(this, STATE.RUNNING, "QUERY_START");
             rs = stmt.executeQuery();
-            buffer(1);
+            buffer(bufferSize);
             monitor.handleEvent(this, STATE.RUNNING, "QUERY_END");
         }
         catch (Exception e) {
@@ -147,14 +154,15 @@ public class SqlTupleStream implements TupleStream {
         }
     }
 
-    private int buffer(int num) throws SQLException {
+    protected int buffer(int num) throws SQLException {
+        assert (num>0);
         for (int i=0; i<num; i++) {
             if (rs.next()) {
                 Tuple tuple = createTuple(rs);
                 buffer.add(tuple);
             }
             else {
-                streamFinished = true;
+                cleanup();
                 return i;
             }
         }
@@ -164,16 +172,45 @@ public class SqlTupleStream implements TupleStream {
 
     @Override
     public boolean hasNext() {
-        return buffer.isEmpty();
+        if (!buffer.isEmpty()) {
+            return true;
+        }
+        else {
+            if (stopped)
+                return false;
+            else {
+                // Get some more:
+                try {
+                    int available = buffer(bufferSize);
+                    return available > 0;
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }
+        }
     }
 
     @Override
     public Tuple getNext() {
+        if (!hasNext()) {
+            throw new RuntimeException(this.name + " attempted to getNext when there are no more Tuples");
+        }
+        Tuple next = buffer.poll();
+        if (!hasNext()) {
+            stop();
+            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.COMPLETED);
+        }
         return buffer.poll();
     }
 
     protected Tuple createTuple (ResultSet rs) throws SQLException {
-        Map<Field, Comparable> row = new HashMap<Field, Comparable>();
+        Map<SqlField, Comparable> row = new HashMap<SqlField, Comparable>();
+
+        for(SqlField field : schema.getAllFields()) {
+            row.put(field, (Comparable) rs.getObject(field.getColumnIndex()));
+        }
+
         Tuple tuple = new Tuple(schema, row);
         return tuple;
     }
@@ -196,12 +233,12 @@ public class SqlTupleStream implements TupleStream {
 
     @Override
     public void stop() {
-        stopped = true;
+        close();
     }
 
     @Override
     public boolean isStopped() {
-        return stopped;
+        return isClosed();
     }
 
     @Override
@@ -221,12 +258,23 @@ public class SqlTupleStream implements TupleStream {
 
     @Override
     public void close() {
+        stopped = true;
+        cleanup ();
+    }
 
+    protected void cleanup () {
+        try {
+            if (!connection.isClosed())
+                connection.close();
+        }
+        catch (SQLException se) {
+            logger.severe(name + " error closing DB connection.");
+        }
     }
 
     @Override
     public boolean isClosed() {
-        return false;
+        return stopped;
     }
 
     public String getSql() {

@@ -26,6 +26,7 @@ public class TupleComparison implements Nameable, Monitorable
     boolean alreadyRun = false;
     boolean shouldCompare = true;
     ComparisonResult result;
+    boolean initialized = false;
 
     public TupleComparison (Config config) {
         key = config.tupleStreamKey;
@@ -36,11 +37,10 @@ public class TupleComparison implements Nameable, Monitorable
         this.name = config.getName() + " TupleComparison";
     }
 
-
-    public ComparisonResult compare () {
+    public void init () {
         assert(!alreadyRun);
+        if(initialized) return;
         try {
-            monitor.handleEvent(this, STATE.STARTING, null);
             leftStream.setTupleStreamKey(key);
             leftStream.setName("LEFT STREAM");
             leftStream.init();
@@ -50,7 +50,25 @@ public class TupleComparison implements Nameable, Monitorable
 
             validateSchemas(leftStream, rightStream);
             compareEventListener.init(leftStream.getSchema());
+            initialized = true;
+        }
+        catch (Exception ex) {
+            logger.severe(getName() + " encountered exception initializing " + ex.getMessage());
+            if (!isStopped()) {
+                // Exceptions that occur after comparison has already stopped are ignored.
+                monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, ex);
+            }
 
+        }
+        finally {
+            initialized = true;
+        }
+    }
+
+    public ComparisonResult compare () {
+        assert(!alreadyRun);
+        assert(initialized);
+        try {
             monitor.registerMonitorable(this);
             monitor.registerMonitorable(leftStream);
             monitor.registerMonitorable(rightStream);
