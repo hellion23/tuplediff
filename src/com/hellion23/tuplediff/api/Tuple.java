@@ -11,7 +11,7 @@ public class Tuple <T extends Field> {
     Map<T, Comparable> fieldToValues;
     Comparable key;
 
-    public Tuple(Schema schema, Map<T, Comparable> row) {
+     public Tuple(Schema schema, Map<T, Comparable> row) {
         this.schema = schema;
         this.fieldToValues = row;
         key = schema.getTupleStreamKey().createKeyForTuple(this);

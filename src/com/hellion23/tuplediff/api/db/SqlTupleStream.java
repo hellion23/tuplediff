@@ -22,7 +22,7 @@ public class SqlTupleStream implements TupleStream {
     String querySql;
     PreparedStatement stmt;
     ResultSet rs;
-    SqlSchema schema;
+    SqlSchema sqlSchema;
     TupleStreamKey tupleStreamKey;
     int bufferSize = 50;
     LinkedBlockingQueue <Tuple> buffer = new LinkedBlockingQueue<Tuple>();
@@ -54,61 +54,72 @@ public class SqlTupleStream implements TupleStream {
 
     }
 
-    @Override
-    public void init() {
+    protected void init() {
         if(initialized) return;
         try {
-            monitor.handleEvent(this, STATE.STARTING, "INIT_START");
-            if (schema == null) {
-                schema = getSchemaFor(tupleStreamKey, connection, sql);
+//            monitor.handleEvent(this, STATE.STARTING, "INIT_START");
+            if (sqlSchema == null) {
+                sqlSchema = createSchemaFor();
             }
             querySql = initQuerySql();
             stmt = connection.prepareStatement(querySql);
             initialized = true;
-            monitor.handleEvent(this, STATE.RUNNING, "INIT_END");
+//            monitor.handleEvent(this, STATE.RUNNING, "INIT_END");
         }
         catch (SQLException e) {
-            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, e);
+            throw new TupleDiffException("Encountered error initializing SqlTupleStream "
+                    + this.getName() + ": " + e.getMessage(),
+                    this, e);
+//            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, e);
         }
     }
 
-    public static SqlSchema getSchemaFor (TupleStreamKey tupleStreamKey, Connection connection, String sql)
-            throws SQLException{
+    protected SqlSchema createSchemaFor () {
+        assert (sql != null);
+        assert (tupleStreamKey != null);
 
-        final PreparedStatement stmt = connection.prepareStatement(sql);
-        final ResultSetMetaData rsmd = stmt.getMetaData();
-        List<SqlField> allFields = new ArrayList<SqlField>();
-        for (int i=1; i<=rsmd.getColumnCount(); i++) {
-            SqlField field = new SqlField(
-                    extractColumnName(rsmd.getColumnName(i)),
-                    rsmd.getColumnType(i),
-                    rsmd.getColumnClassName(i),
-                    rsmd.getColumnName(i),
-                    i
-            );
-            allFields.add(field);
-        }
+        SqlSchema schema = null;
+        try {
+            final PreparedStatement stmt = connection.prepareStatement(sql);
+            final ResultSetMetaData rsmd = stmt.getMetaData();
+            List<SqlField> allFields = new ArrayList<SqlField>();
+            for (int i=1; i<=rsmd.getColumnCount(); i++) {
+                SqlField field = new SqlField(
+                        extractColumnName(rsmd.getColumnName(i)),
+                        rsmd.getColumnType(i),
+                        rsmd.getColumnClassName(i),
+                        rsmd.getColumnName(i),
+                        i
+                );
+                allFields.add(field);
+            }
 
-        //Identify the primary key fields:
-        List<SqlField> keyFields = new LinkedList<SqlField>();
-        for (Field k : tupleStreamKey.getFields()) {
-            boolean found = false;
-            String lookFor = extractColumnName(k.getExpression());
-            for (SqlField af: allFields) {
-                if (lookFor.equals(af.getName())) {
-                    found = true;
-                    keyFields.add(af);
-                    break;
+            //Identify the primary key fields:
+            List<SqlField> keyFields = new LinkedList<SqlField>();
+            for (Field k : tupleStreamKey.getFields()) {
+                boolean found = false;
+                String lookFor = extractColumnName(k.getExpression());
+                for (SqlField af: allFields) {
+                    if (lookFor.equals(af.getName())) {
+                        found = true;
+                        keyFields.add(af);
+                        break;
+                    }
+                }
+                if (!found) {
+                    throw new TupleDiffException(" Could not find Tuple Key " + lookFor + " amongst these fields: " +
+                            allFields, this);
                 }
             }
-            if (!found) {
-                throw new RuntimeException(" Could not find Tuple Key " + lookFor + " amongst these fields: " + allFields);
-            }
-        }
 
-        SqlSchema schema = new SqlSchema(tupleStreamKey, allFields, keyFields);
-        schema.setVendor(connection.getMetaData().getDatabaseProductName());
-        schema.setVersion(connection.getMetaData().getDatabaseProductVersion());
+            schema = new SqlSchema(tupleStreamKey, allFields, keyFields);
+            schema.setVendor(connection.getMetaData().getDatabaseProductName());
+            schema.setVersion(connection.getMetaData().getDatabaseProductVersion());
+        }
+        catch (SQLException se) {
+            throw new TupleDiffException ("Could not create Schema for " + getName() + ": " + se.getMessage(),
+                    this, se);
+        }
         return schema ;
     }
 
@@ -124,7 +135,7 @@ public class SqlTupleStream implements TupleStream {
 
     protected String initQuerySql () {
         StringBuilder orderBy = new StringBuilder(" order by ");
-        constructOrderByClause (orderBy, schema.getKeyFields());
+        constructOrderByClause(orderBy, sqlSchema.getKeyFields());
         return sql + orderBy ;
     }
 
@@ -143,14 +154,18 @@ public class SqlTupleStream implements TupleStream {
     @Override
     public void open() {
         try {
-            monitor.handleEvent(this, STATE.RUNNING, "QUERY_START");
+            init ();
+//            monitor.handleEvent(this, STATE.RUNNING, "QUERY_START");
             rs = stmt.executeQuery();
             buffer(bufferSize);
-            monitor.handleEvent(this, STATE.RUNNING, "QUERY_END");
+//            monitor.handleEvent(this, STATE.RUNNING, "QUERY_END");
         }
         catch (Exception e) {
             stopped = true;
-            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, e);
+            throw new TupleDiffException("Encountered error running SqlTupleStream query: "
+                    + this.getName() + ": " + e.getMessage(),
+                    this, e);
+//            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, e);
         }
     }
 
@@ -194,12 +209,8 @@ public class SqlTupleStream implements TupleStream {
     @Override
     public Tuple getNext() {
         if (!hasNext()) {
-            throw new RuntimeException(this.name + " attempted to getNext when there are no more Tuples");
-        }
-        Tuple next = buffer.poll();
-        if (!hasNext()) {
-            stop();
-            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.COMPLETED);
+            throw new TupleDiffException("No more Tuples in this SqlTupleStream <"
+                    + this.getName()  + ">",  this);
         }
         return buffer.poll();
     }
@@ -207,11 +218,11 @@ public class SqlTupleStream implements TupleStream {
     protected Tuple createTuple (ResultSet rs) throws SQLException {
         Map<SqlField, Comparable> row = new HashMap<SqlField, Comparable>();
 
-        for(SqlField field : schema.getAllFields()) {
+        for(SqlField field : sqlSchema.getAllFields()) {
             row.put(field, (Comparable) rs.getObject(field.getColumnIndex()));
         }
 
-        Tuple tuple = new Tuple(schema, row);
+        Tuple tuple = new Tuple(sqlSchema, row);
         return tuple;
     }
 
@@ -231,15 +242,6 @@ public class SqlTupleStream implements TupleStream {
         this.monitor = monitor;
     }
 
-    @Override
-    public void stop() {
-        close();
-    }
-
-    @Override
-    public boolean isStopped() {
-        return isClosed();
-    }
 
     @Override
     public TupleStreamKey getTupleStreamKey() {
@@ -253,7 +255,15 @@ public class SqlTupleStream implements TupleStream {
 
     @Override
     public Schema getSchema() {
-        return schema;
+        if (sqlSchema == null) {
+            sqlSchema = createSchemaFor();
+        }
+        return sqlSchema;
+    }
+
+    @Override
+    public void setSchema(Schema schema) {
+        this.sqlSchema = (SqlSchema) schema;
     }
 
     @Override
@@ -270,11 +280,6 @@ public class SqlTupleStream implements TupleStream {
         catch (SQLException se) {
             logger.severe(name + " error closing DB connection.");
         }
-    }
-
-    @Override
-    public boolean isClosed() {
-        return stopped;
     }
 
     public String getSql() {

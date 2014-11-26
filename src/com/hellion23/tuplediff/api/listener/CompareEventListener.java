@@ -9,5 +9,6 @@ import com.hellion23.tuplediff.api.monitor.Monitorable;
  */
 public interface CompareEventListener extends Monitorable {
     public void handleTupleBreak (CompareEvent compareEvent);
-    public void init(Schema schema);
+    public void init(Schema leftSchema, Schema rightSchema);
+    public void close();
 }

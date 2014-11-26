@@ -2,7 +2,7 @@ package com.hellion23.tuplediff.api;
 
 import com.hellion23.tuplediff.api.listener.CompareEventListener;
 import com.hellion23.tuplediff.api.monitor.Monitorable;
-import com.hellion23.tuplediff.api.monitor.MonitorableStats;
+import com.hellion23.tuplediff.api.monitor.Stats;
 
 import java.util.Collection;
 import java.util.LinkedList;
@@ -15,7 +15,7 @@ import java.util.Map;
 public class ComparisonResult {
     Collection<CompareEvent> compareEvents = new LinkedList<CompareEvent>();
     CompareEventListener listener;
-    private Map<Monitorable, MonitorableStats> stats;
+    private Map<Monitorable, Stats> stats;
 
     public Collection<CompareEvent> getCompareEvents() {
         return compareEvents;
@@ -25,11 +25,11 @@ public class ComparisonResult {
         this.compareEvents = compareEvents;
     }
 
-    public Map<Monitorable, MonitorableStats> getStats() {
+    public Map<Monitorable, Stats> getStats() {
         return stats;
     }
 
-    public void setStats(Map<Monitorable, MonitorableStats> stats) {
+    public void setStats(Map<Monitorable, Stats> stats) {
         this.stats = stats;
     }
 
@@ -38,10 +38,10 @@ public class ComparisonResult {
     }
 
     public void addComparisonEvent (CompareEvent tupleBreak) {
-        if (listener == null) {
+        if (compareEvents != null) {
             compareEvents.add(tupleBreak);
         }
-        else {
+        if (listener != null) {
             listener.handleTupleBreak(tupleBreak);
         }
     }

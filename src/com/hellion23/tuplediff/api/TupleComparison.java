@@ -1,98 +1,123 @@
 package com.hellion23.tuplediff.api;
 
+import com.hellion23.tuplediff.api.db.SqlTupleStream;
 import com.hellion23.tuplediff.api.listener.CompareEventListener;
 import com.hellion23.tuplediff.api.monitor.Monitor;
-import com.hellion23.tuplediff.api.monitor.Monitorable;
 import com.hellion23.tuplediff.api.monitor.Nameable;
+import com.hellion23.tuplediff.api.monitor.TupleComparisonMonitor;
 
+import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.logging.Logger;
 
 /**
- * Created by Hermann on 9/28/2014.
+ * @author: Hermann Leung
+ * Date: 11/24/2014
  */
-public class TupleComparison implements Nameable, Monitorable
-{
-
-    private static final Logger logger = Logger.getLogger(TupleComparison.class.getName());
-    String name;
-    ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2);
-    TupleStream leftStream, rightStream;
-    TupleStreamKey key;
-    CompareEventListener compareEventListener;
-    Monitor monitor;
-    boolean alreadyRun = false;
+public class TupleComparison implements Nameable {
+    TupleStream leftStream = null;
+    TupleStream rightStream = null;
+    CompareEventListener listener = null;
+    private ThreadPoolExecutor ex = new ScheduledThreadPoolExecutor(2);
+    private ComparisonResult result;
+    private Monitor monitor;
     boolean shouldCompare = true;
-    ComparisonResult result;
-    boolean initialized = false;
+    boolean alreadyRan = false;
+    String name;
 
     public TupleComparison (Config config) {
-        key = config.tupleStreamKey;
-        leftStream = config.leftStream;
-        rightStream = config.rightStream;
-        compareEventListener = config.compareEventListener;
-        result = new ComparisonResult(compareEventListener);
-        this.name = config.getName() + " TupleComparison";
+        this.leftStream = config.getLeftStream();
+        this.rightStream = config.getRightStream();
+        this.listener = config.getCompareEventListener();
+        result = new ComparisonResult(this.listener);
+        this.name = config.getName() + "-["+System.currentTimeMillis()+"]";
     }
 
-    public void init () {
-        assert(!alreadyRun);
-        if(initialized) return;
-        try {
-            leftStream.setTupleStreamKey(key);
-            leftStream.setName("LEFT STREAM");
-            leftStream.init();
-            rightStream.setTupleStreamKey(key);
-            leftStream.setName("RIGHT STREAM");
-            rightStream.init();
 
-            validateSchemas(leftStream, rightStream);
-            compareEventListener.init(leftStream.getSchema());
-            initialized = true;
+    protected void initialize () throws TupleDiffException {
+        // Setup monitor if none set:
+        if (monitor == null) {
+            monitor = new TupleComparisonMonitor(this, leftStream, rightStream);
         }
-        catch (Exception ex) {
-            logger.severe(getName() + " encountered exception initializing " + ex.getMessage());
-            if (!isStopped()) {
-                // Exceptions that occur after comparison has already stopped are ignored.
-                monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, ex);
-            }
 
+        // Setup & validate streams:
+        validateSchemas(leftStream, rightStream);
+
+        // Setup listeners:
+        listener.init(leftStream.getSchema(), rightStream.getSchema());
+
+        // open up streams for reading
+        prepareStreamsForReading();
+    }
+
+    protected void prepareStreamsForReading () {
+        CountDownLatch doneSignal = new CountDownLatch(2);
+
+        StreamRunnable leftRunnable = new StreamRunnable(monitor, leftStream, doneSignal);
+        StreamRunnable rightRunnable = new StreamRunnable(monitor, rightStream, doneSignal);
+
+        ex.execute(leftRunnable);
+        ex.execute(rightRunnable);
+
+        // Wait until both streams are ready to be read.
+        try {doneSignal.await();} catch (InterruptedException e) {}
+
+        if (leftRunnable.getException() != null) {
+            rightRunnable.stop();
+            throw new TupleDiffException("Error with opening " + leftStream.getName() + " stream ",
+                    leftStream, leftRunnable.getException()) ;
         }
-        finally {
-            initialized = true;
+
+        if (rightRunnable.getException() != null) {
+            leftRunnable.stop();
+            throw new TupleDiffException("Error with opening " + rightStream.getName() + " stream ",
+                    rightStream, rightRunnable.getException()) ;
         }
     }
 
-    public ComparisonResult compare () {
-        assert(!alreadyRun);
-        assert(initialized);
+    public ComparisonResult compare() throws TupleDiffException{
+        assert (!alreadyRan);
         try {
-            monitor.registerMonitorable(this);
-            monitor.registerMonitorable(leftStream);
-            monitor.registerMonitorable(rightStream);
-            monitor.registerMonitorable(compareEventListener);
+            // Init Streams:
+            initialize();
 
-            executor.execute(new StreamRunnable(leftStream));
-            executor.execute(new StreamRunnable(rightStream));
-
+            // do actual comparison of data
             compareTuples();
-            monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.COMPLETED);
+
+            monitor.reportEvent(this, Monitor.EVENT_STOP_NORMAL);
         }
         catch (Exception ex) {
-            logger.severe(getName() + " encountered exception comparing " + ex.getMessage());
-            if (!isStopped()) {
-                // Exceptions that occur after comparison has already stopped are ignored.
-                monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.FAILED, ex);
+            TupleDiffException tde = null;
+
+            // Exception with identifiable source.
+            if (ex instanceof TupleDiffException) {
+                tde = (TupleDiffException) ex;
+            }
+            // Unknown source exception; wrap it and designate this class as the source
+            else {
+                tde = new TupleDiffException("Unexpected exception during TupleDiff comparison. "
+                        + ex.getMessage(), this, ex);
             }
 
+            // Report the event:
+            monitor.reportEvent(tde.getSource(), Monitor.EVENT_STOP_ABNORMAL, tde);
+
+            throw tde;
         }
         finally {
-            alreadyRun = true;
-            result.setStats(monitor.getAllStats());
+            alreadyRan= true;
+            cleanup();
         }
         return result;
+    }
+
+    private void cleanup () {
+        leftStream.close();
+        rightStream.close();
+        listener.close();
     }
 
     private void compareTuples() {
@@ -106,7 +131,7 @@ public class TupleComparison implements Nameable, Monitorable
                 while (shouldCompare) {
                     int comp = left.getKey().compareTo(right.getKey());
                     if (comp == 0) {
-                        List <String> breakFields = compareRows (left, right);
+                        List<String> breakFields = getBreakFields(left, right);
                         if (breakFields != null) {
                             comparisonEvent(CompareEvent.TYPE.PAIR_BREAK, left, right, breakFields);
                         }
@@ -161,7 +186,7 @@ public class TupleComparison implements Nameable, Monitorable
     }
 
     protected void comparisonEvent (CompareEvent.TYPE event, Tuple left, Tuple right, List<String> breakFields) {
-        monitor.handleEvent(this, STATE.RUNNING, event);
+        monitor.reportEvent(this, "COMPARE_EVENT", event);
         switch (event) {
             case DATA_LEFT:
             case DATA_RIGHT:
@@ -173,47 +198,36 @@ public class TupleComparison implements Nameable, Monitorable
                 result.addComparisonEvent(new CompareEvent (event, left, right, breakFields));
                 break;
         }
-
     }
 
-    private List<String> compareRows(Tuple left, Tuple right) {
+    /**
+     * This method is
+     */
+    public void cancel () {
+        if (!alreadyRan) {
+            cleanup();
+        }
+    }
+
+    private List<String> getBreakFields(Tuple left, Tuple right) {
+//        TODO: Do logic for calculating break fields.
         return null;
     }
 
-    static class StreamRunnable implements Runnable {
-        TupleStream tupleStream;
-        public StreamRunnable (TupleStream tupleStream) {
-            this.tupleStream = tupleStream;
-        }
-        @Override
-        public void run() {
-            tupleStream.open();
-        }
-    }
-
     private void validateSchemas(TupleStream left, TupleStream right) {
+        // TODO complete code for validating schemas.
+        final List<Field> leftFields = left.getSchema().getAllFields();
+        final List<Field> rightFields = right.getSchema().getAllFields();
 
-    }
+        if (leftFields.size() != rightFields.size()) {
+            throw new TupleDiffException(
+                "Unexpected # of fields in Stream schemas. Left = <"+leftFields.size() + "> Right = <"
+                    + rightFields.size() + "> ",
+                 this
+            );
+        }
 
-    @Override
-    public void setMonitor(Monitor monitor) {
-        this.monitor = monitor;
-    }
 
-    public void cancel () {
-        stop();
-        monitor.handleEvent(this, STATE.TERMINATED, STOP_REASON.CANCEL);
-
-    }
-
-    @Override
-    public void stop() {
-
-        shouldCompare = false;
-    }
-
-    public boolean isStopped() {
-        return shouldCompare;
     }
 
     @Override
@@ -223,6 +237,70 @@ public class TupleComparison implements Nameable, Monitorable
 
     @Override
     public String getName() {
-        return this.name;
+        return name;
+    }
+
+    static class StreamRunnable implements Runnable {
+        Monitor monitor;
+        TupleStream tupleStream;
+        CountDownLatch doneSignal;
+        TupleDiffException exception;
+        Thread runningThread;
+
+        public StreamRunnable (Monitor monitor, TupleStream tupleStream, CountDownLatch doneSignal) {
+            this.monitor = monitor;
+            this.tupleStream = tupleStream;
+            this.doneSignal = doneSignal;
+        }
+        @Override
+        public void run() {
+            try {
+                runningThread = Thread.currentThread();
+                monitor.reportEvent(tupleStream, Monitor.EVENT_START);
+                tupleStream.open();
+                monitor.reportEvent(tupleStream, Monitor.EVENT_STOP_NORMAL);
+            }
+            catch (Exception ex) {
+                this.exception = new TupleDiffException("Encountered error in " +
+                        tupleStream.getName() + " : " + ex.getMessage(), tupleStream, ex);
+                monitor.reportEvent(tupleStream, Monitor.EVENT_STOP_ABNORMAL, this.exception);
+                // Force the other stream to stop.
+                this.doneSignal.countDown();
+            }
+            finally {
+                // This stream has completed.
+                this.doneSignal.countDown();
+            }
+        }
+
+        public void stop () {
+                tupleStream.close();
+        }
+
+        public TupleDiffException getException () {
+            return exception;
+        }
+    }
+
+    public static void main (String args[]) throws Exception{
+        Connection conn = null;
+        SqlTupleStream leftStream = SqlTupleStream.create(conn);
+        Schema leftSchema = leftStream.getSchema();
+        Config config = new Config();
+        config.setLeftStream(leftStream);
+        config.setRightStream(SqlTupleStream.create(conn));
+        TupleComparison comparison = new TupleComparison(config);
+        ComparisonResult result = comparison.compare();
+        List<CompareEvent> compareEvents = new ArrayList<CompareEvent>();
+
+//        TODO: Make flow-y API work.
+//        Config.configure()
+//                .usingSql("select * from DIM_FUND")
+//                .withLeftConnection(conn)
+//                .withRightConnection(conn)
+//                .withKey(new String[] {"ABC", "DEF"})
+//                .drainResultsTo(compareEvents)
+//        )  ;
+        System.out.println ("DONE!");
     }
 }

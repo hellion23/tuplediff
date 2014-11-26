@@ -42,4 +42,12 @@ public class Field implements Nameable, Comparable <Field> {
             return name.compareTo(field.getName());
         }
     }
+
+    @Override
+    public boolean equals (Object f) {
+        if (f instanceof Field)
+            return false;
+        else
+            return compareTo((Field)f) == 0;
+    }
 }

@@ -7,14 +7,17 @@ import com.hellion23.tuplediff.api.monitor.Nameable;
  * @author: Hermann Leung
  * Date: 6/3/14
  */
-public interface TupleStream extends Nameable, Monitorable {
+public interface TupleStream extends Nameable {
     public TupleStreamKey getTupleStreamKey();
     public void setTupleStreamKey(TupleStreamKey key);
-    public void init();
     public void open();
     public Schema getSchema();
+    public void setSchema(Schema schema);
     public boolean hasNext();
     public Tuple getNext();
+
+    /**
+     * This method should clean up any resources, close silently and be idempotent.
+     */
     public void close();
-    public boolean isClosed();
 }
