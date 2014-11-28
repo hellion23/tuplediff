@@ -19,14 +19,14 @@ public class Config implements Nameable {
     Monitor monitor;
     String name;
     CompareEventListener compareEventListener;
-    Collection<CompareEvent> compareEvents;
+    Collection<CompareEvent> drainTo;
 
-    public Collection<CompareEvent> getCompareEvents() {
-        return compareEvents;
+    public Collection<CompareEvent> getDrainTo() {
+        return drainTo;
     }
 
-    public void setCompareEvents(Collection<CompareEvent> compareEvents) {
-        this.compareEvents = compareEvents;
+    public void setDrainTo(Collection<CompareEvent> compareEvents) {
+        this.drainTo = compareEvents;
     }
 
     Map<Field, Comparator<Comparable>> fieldComparatorOverrides = new HashMap<Field, Comparator<Comparable>>();

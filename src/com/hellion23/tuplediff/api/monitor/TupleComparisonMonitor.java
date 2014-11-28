@@ -1,9 +1,6 @@
 package com.hellion23.tuplediff.api.monitor;
 
-import com.hellion23.tuplediff.api.CompareEvent;
-import com.hellion23.tuplediff.api.TupleComparison;
-import com.hellion23.tuplediff.api.TupleDiffException;
-import com.hellion23.tuplediff.api.TupleStream;
+import com.hellion23.tuplediff.api.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,17 +16,18 @@ public class TupleComparisonMonitor implements Monitor {
     TupleComparison tc;
     protected Map<Nameable, Stats> allStats = new HashMap<Nameable, Stats>();
 
-    public TupleComparisonMonitor (TupleComparison tc, TupleStream leftStream, TupleStream rightStream) {
+    public TupleComparisonMonitor (TupleComparison tc, Config config) {
         this.tc = tc;
-        allStats.put(tc, new TCSTats());
-        allStats.put(leftStream, new Stats());
-        allStats.put(rightStream, new Stats());
+        allStats.put(tc, new TCSTats(tc));
+        allStats.put(config.getLeftStream(), new Stats(config.getLeftStream()));
+        allStats.put(config.getRightStream(), new Stats(config.getRightStream()));
     }
 
 
     @Override
     public void reportEvent(Nameable source, String eventName, Object... params) throws TupleDiffException {
         allStats.get(source).event(eventName, params);
+        validateHealth();
     }
 
 
@@ -37,6 +35,20 @@ public class TupleComparisonMonitor implements Monitor {
     public Map <Nameable, Stats> getStats() {
         return allStats;
     }
+
+
+    /**
+     * Sub-Classes can be overriden to re-implement health checks. By default, this method is called every time an event
+     * is reported (as this assumes the reporting is frequent).
+     * Alternatively the monitor class can be run in it's own separate thread and periodically poll this method
+     * to verify the comparison is going well.
+     *
+     * @throws TupleDiffException
+     */
+    protected void validateHealth ()throws TupleDiffException {
+//            TODO check whether there are too many breaks, etc...
+    }
+
 
     protected void stopComparison() {
         this.tc.cancel();
@@ -53,6 +65,10 @@ public class TupleComparisonMonitor implements Monitor {
         protected int totalRight;
         protected int totalBreaks;
         protected int totalMatched;
+
+        public TCSTats (Nameable source) {
+            super(source);
+        }
 
         public int getTotalOnlyLeft() {
             return totalOnlyLeft;
@@ -101,9 +117,6 @@ public class TupleComparisonMonitor implements Monitor {
                             totalMatched++;
                             break;
                     }
-
-                    validateHealth();
-
                     break;
                 default:
                     super.event(event, params);
@@ -111,8 +124,5 @@ public class TupleComparisonMonitor implements Monitor {
             }
         }
 
-        public void validateHealth () {
-//            TODO check whether there are too many breaks, etc...
-        }
     }
 }

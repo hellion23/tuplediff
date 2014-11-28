@@ -18,8 +18,8 @@ public class SqlTupleStream implements TupleStream {
     Monitor monitor;
     boolean stopped = false;
     Connection connection;
-    String sql;
-    String querySql;
+    String baseSql;
+    String runSql;
     PreparedStatement stmt;
     ResultSet rs;
     SqlSchema sqlSchema;
@@ -61,8 +61,8 @@ public class SqlTupleStream implements TupleStream {
             if (sqlSchema == null) {
                 sqlSchema = createSchemaFor();
             }
-            querySql = initQuerySql();
-            stmt = connection.prepareStatement(querySql);
+            runSql = initQuerySql();
+            stmt = connection.prepareStatement(runSql);
             initialized = true;
 //            monitor.handleEvent(this, STATE.RUNNING, "INIT_END");
         }
@@ -75,12 +75,12 @@ public class SqlTupleStream implements TupleStream {
     }
 
     protected SqlSchema createSchemaFor () {
-        assert (sql != null);
+        assert (baseSql != null);
         assert (tupleStreamKey != null);
 
         SqlSchema schema = null;
         try {
-            final PreparedStatement stmt = connection.prepareStatement(sql);
+            final PreparedStatement stmt = connection.prepareStatement(baseSql);
             final ResultSetMetaData rsmd = stmt.getMetaData();
             List<SqlField> allFields = new ArrayList<SqlField>();
             for (int i=1; i<=rsmd.getColumnCount(); i++) {
@@ -134,9 +134,9 @@ public class SqlTupleStream implements TupleStream {
     }
 
     protected String initQuerySql () {
-        StringBuilder orderBy = new StringBuilder(" order by ");
+        StringBuilder orderBy = new StringBuilder("\norder by ");
         constructOrderByClause(orderBy, sqlSchema.getKeyFields());
-        return sql + orderBy ;
+        return baseSql + orderBy ;
     }
 
     /**
@@ -219,11 +219,25 @@ public class SqlTupleStream implements TupleStream {
         Map<SqlField, Comparable> row = new HashMap<SqlField, Comparable>();
 
         for(SqlField field : sqlSchema.getAllFields()) {
-            row.put(field, (Comparable) rs.getObject(field.getColumnIndex()));
+            row.put(field, extractComparable(field, rs));
         }
 
         Tuple tuple = new Tuple(sqlSchema, row);
         return tuple;
+    }
+
+    protected Comparable extractComparable (SqlField field, ResultSet rs) throws SQLException, TupleDiffException {
+            Object o = rs.getObject(field.getColumnIndex());
+            if (o == null || o instanceof Comparable) {
+                return (Comparable) o;
+            }
+            else if (o instanceof java.sql.Timestamp) {
+                return rs.getTimestamp(field.getColumnIndex());
+            }
+            else {
+                throw new TupleDiffException ("Field " + field.getName() + ", Class=" + o.getClass() +
+                        " is not a Comparable object. Exclude this field from query. ", this);
+            }
     }
 
     public String getName() {
@@ -283,11 +297,11 @@ public class SqlTupleStream implements TupleStream {
     }
 
     public String getSql() {
-        return sql;
+        return baseSql;
     }
 
     public void setSql(String sql) {
-        this.sql = sql;
+        this.baseSql = sql;
     }
 
     protected static class OracleSqlTupleStream extends SqlTupleStream {
@@ -307,6 +321,18 @@ public class SqlTupleStream implements TupleStream {
                 if (i<keyFields.size()-1) sb.append(", ");
             }
             sb.append (" nulls first ");
+        }
+
+        protected Comparable extractComparable (SqlField field, ResultSet rs) throws SQLException, TupleDiffException {
+            Object o = rs.getObject(field.getColumnIndex());
+//            TODO: Fix this. Although this works for the purposes of sorting and comparing across Oracle queries, will not work when comparing vs another DB. Also could matter to downstream systems expecting an actual Date object.
+            if (o.getClass().getName().equals( "oracle.sql.TIMESTAMP")) {
+                return rs.getString(field.getColumnIndex());
+//                return rs.getTimestamp (field.getColumnIndex()+1);
+            }
+            else {
+                return super.extractComparable(field, rs);
+            }
         }
     }
 

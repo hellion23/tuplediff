@@ -1,6 +1,5 @@
 package com.hellion23.tuplediff.api;
 
-import com.hellion23.tuplediff.api.monitor.Monitorable;
 import com.hellion23.tuplediff.api.monitor.Nameable;
 
 /**

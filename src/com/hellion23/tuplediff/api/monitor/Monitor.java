@@ -5,11 +5,7 @@ import com.hellion23.tuplediff.api.TupleDiffException;
 import java.util.Map;
 
 /**
- * A Monitor may treat events emitted by a Monitorable in any way appropriate, but should be populating
- * a MonitorableStats object for any or all of the Monitorable objects under its supervision.
- *
- * It should also at a minimum handle the TERMINATED event, and especially if the STOP_REASON is FAILED or CANCEL,
- * which are abnormal termination states.
+ * A Monitor tracks  events that are reported by the different sources that it is tracking.
  *
  * Created by Hermann on 9/28/2014.
  */

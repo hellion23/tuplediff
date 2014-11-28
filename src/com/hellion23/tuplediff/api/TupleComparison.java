@@ -1,7 +1,6 @@
 package com.hellion23.tuplediff.api;
 
 import com.hellion23.tuplediff.api.db.SqlTupleStream;
-import com.hellion23.tuplediff.api.listener.CompareEventListener;
 import com.hellion23.tuplediff.api.monitor.Monitor;
 import com.hellion23.tuplediff.api.monitor.Nameable;
 import com.hellion23.tuplediff.api.monitor.TupleComparisonMonitor;
@@ -18,39 +17,53 @@ import java.util.concurrent.ThreadPoolExecutor;
  * Date: 11/24/2014
  */
 public class TupleComparison implements Nameable {
-    TupleStream leftStream = null;
-    TupleStream rightStream = null;
-    CompareEventListener listener = null;
+    TupleStream leftStream;
+    TupleStream rightStream;
+    Config config;
     private ThreadPoolExecutor ex = new ScheduledThreadPoolExecutor(2);
     private ComparisonResult result;
     private Monitor monitor;
-    boolean shouldCompare = true;
-    boolean alreadyRan = false;
+    volatile boolean notCancelled = true;
+    volatile boolean alreadyRan = false;
     String name;
 
     public TupleComparison (Config config) {
+        assert (config != null);
+        this.config = config;
+
         this.leftStream = config.getLeftStream();
+        assert (this.leftStream !=null);
         this.rightStream = config.getRightStream();
-        this.listener = config.getCompareEventListener();
-        result = new ComparisonResult(this.listener);
+        assert (this.rightStream != null);
+
+        this.monitor = config.getMonitor();
+        if (this.monitor == null) {
+            monitor = new TupleComparisonMonitor(this, config);
+        }
+        this.result = new ComparisonResult(config);
         this.name = config.getName() + "-["+System.currentTimeMillis()+"]";
     }
 
 
     protected void initialize () throws TupleDiffException {
-        // Setup monitor if none set:
-        if (monitor == null) {
-            monitor = new TupleComparisonMonitor(this, leftStream, rightStream);
-        }
-
         // Setup & validate streams:
         validateSchemas(leftStream, rightStream);
 
+        // initialize Comparators:
+        initComparators();
+
         // Setup listeners:
-        listener.init(leftStream.getSchema(), rightStream.getSchema());
+        if (config.getCompareEventListener() != null) {
+            config.getCompareEventListener().init(leftStream.getSchema(), rightStream.getSchema());
+        }
 
         // open up streams for reading
         prepareStreamsForReading();
+    }
+
+    protected void initComparators () {
+//    TODO Add initialization logic
+
     }
 
     protected void prepareStreamsForReading () {
@@ -78,10 +91,10 @@ public class TupleComparison implements Nameable {
         }
     }
 
-    public ComparisonResult compare() throws TupleDiffException{
+    public synchronized ComparisonResult compare() throws TupleDiffException{
         assert (!alreadyRan);
         try {
-            // Init Streams:
+            // Initialize everything:
             initialize();
 
             // do actual comparison of data
@@ -105,7 +118,11 @@ public class TupleComparison implements Nameable {
             // Report the event:
             monitor.reportEvent(tde.getSource(), Monitor.EVENT_STOP_ABNORMAL, tde);
 
-            throw tde;
+            // Re-throw the exception if this was an un-expected exception. i.e. the comparison was not cancelled,
+            // but was instead abnormally/unexpected cancelled.
+            if (notCancelled) {
+                throw tde;
+            }
         }
         finally {
             alreadyRan= true;
@@ -117,18 +134,20 @@ public class TupleComparison implements Nameable {
     private void cleanup () {
         leftStream.close();
         rightStream.close();
-        listener.close();
+        if (config.getCompareEventListener() != null) {
+            config.getCompareEventListener().close();
+        }
     }
 
     private void compareTuples() {
         Tuple left, right;
-        while (shouldCompare) {
+        while (notCancelled) {
             if (leftStream.hasNext() && rightStream.hasNext()) {
                 left = leftStream.getNext();
                 comparisonEvent(CompareEvent.TYPE.DATA_LEFT, left, null, null);
                 right = rightStream.getNext();
                 comparisonEvent(CompareEvent.TYPE.DATA_RIGHT, null, right, null);
-                while (shouldCompare) {
+                while (notCancelled) {
                     int comp = left.getKey().compareTo(right.getKey());
                     if (comp == 0) {
                         List<String> breakFields = getBreakFields(left, right);
@@ -171,13 +190,13 @@ public class TupleComparison implements Nameable {
                 }
             }
 
-            while (shouldCompare && leftStream.hasNext()) {
+            while (notCancelled && leftStream.hasNext()) {
                 left = leftStream.getNext();
                 comparisonEvent(CompareEvent.TYPE.DATA_LEFT, left, null, null);
                 comparisonEvent(CompareEvent.TYPE.LEFT_BREAK, left, null, null);
             }
 
-            while (shouldCompare && rightStream.hasNext()) {
+            while (notCancelled && rightStream.hasNext()) {
                 right = rightStream.getNext();
                 comparisonEvent(CompareEvent.TYPE.DATA_RIGHT, null, right, null);
                 comparisonEvent(CompareEvent.TYPE.RIGHT_BREAK, null, right, null);
@@ -195,15 +214,13 @@ public class TupleComparison implements Nameable {
             case PAIR_BREAK:
             case LEFT_BREAK:
             case RIGHT_BREAK:
-                result.addComparisonEvent(new CompareEvent (event, left, right, breakFields));
+                result.handleCompareEvent(new CompareEvent(event, left, right, breakFields));
                 break;
         }
     }
 
-    /**
-     * This method is
-     */
     public void cancel () {
+        notCancelled = false;
         if (!alreadyRan) {
             cleanup();
         }
