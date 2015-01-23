@@ -37,6 +37,14 @@ public class Tuple <T extends Field> {
         return fieldToValues.get(f);
     }
 
+    public Comparable getValue (String name) {
+        return fieldToValues.get(schema.getField(name));
+    }
+
     public Map<T, Comparable> getAllValues () { return fieldToValues; }
+
+    public String toString () {
+        return fieldToValues.toString();
+    }
 }
 

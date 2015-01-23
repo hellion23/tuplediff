@@ -3,6 +3,7 @@ package com.hellion23.tuplediff.api.db;
 import com.hellion23.tuplediff.api.*;
 import com.hellion23.tuplediff.api.monitor.Monitor;
 
+import java.io.Serializable;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -15,31 +16,34 @@ public class SqlTupleStream implements TupleStream {
 
     private static final Logger logger = Logger.getLogger(TupleComparison.class.getName());
     String name;
-    Monitor monitor;
     boolean stopped = false;
     Connection connection;
-    String baseSql;
-    String runSql;
     PreparedStatement stmt;
     ResultSet rs;
+    String baseSql;
+    String runSql;
     SqlSchema sqlSchema;
     TupleStreamKey tupleStreamKey;
+    String [] primaryKeys;
+    String [] includeFieldNames;
+    String [] excludeFieldNames;
     int bufferSize = 50;
     LinkedBlockingQueue <Tuple> buffer = new LinkedBlockingQueue<Tuple>();
+    List <SqlField> allFields;
     boolean initialized = false;
 
-    public static SqlTupleStream create (Connection connection) {
+    public static SqlTupleStream create (Connection connection, String sql, String primaryKeys[]) {
         try {
             SqlTupleStream ts = null;
             switch (connection.getMetaData().getDatabaseProductName()) {
                 case "Oracle":
-                    ts = new OracleSqlTupleStream(connection);
+                    ts = new OracleSqlTupleStream(connection, sql, primaryKeys);
                     break;
                 case "Microsoft SQL Server":
-                    ts = new SQLServerTupleStream(connection);
+                    ts = new SQLServerTupleStream(connection, sql, primaryKeys);
                     break;
                 default:
-                    ts = new SqlTupleStream(connection);
+                    ts = new SqlTupleStream(connection, sql, primaryKeys);
                     break;
             }
             return ts;
@@ -49,13 +53,27 @@ public class SqlTupleStream implements TupleStream {
         }
     }
 
-    private SqlTupleStream (Connection connection) {
+    private SqlTupleStream ( Connection connection, String sql, String [] primaryKeys ) {
+        assert (connection != null);
+        assert (sql != null);
+        assert (primaryKeys != null && primaryKeys.length > 0);
         this.connection = connection;
-
+        this.baseSql = sql;
+        this.primaryKeys = primaryKeys;
     }
 
     protected void init() {
         if(initialized) return;
+
+        if (
+                (includeFieldNames != null && includeFieldNames.length > 0) &&
+                (excludeFieldNames != null && excludeFieldNames.length > 0))
+        {
+            throw new TupleDiffException("Include Field Names and Exclude Field Names cannot be simultaneously defined." +
+                    " Only exclude fields or include field or neither can be populated",
+                this, null);
+        }
+
         try {
 //            monitor.handleEvent(this, STATE.STARTING, "INIT_START");
             if (sqlSchema == null) {
@@ -75,14 +93,14 @@ public class SqlTupleStream implements TupleStream {
     }
 
     protected SqlSchema createSchemaFor () {
-        assert (baseSql != null);
-        assert (tupleStreamKey != null);
+        assert baseSql != null;
+        assert primaryKeys != null;
 
         SqlSchema schema = null;
         try {
             final PreparedStatement stmt = connection.prepareStatement(baseSql);
             final ResultSetMetaData rsmd = stmt.getMetaData();
-            List<SqlField> allFields = new ArrayList<SqlField>();
+            this.allFields = new ArrayList<SqlField>();
             for (int i=1; i<=rsmd.getColumnCount(); i++) {
                 SqlField field = new SqlField(
                         extractColumnName(rsmd.getColumnName(i)),
@@ -96,9 +114,10 @@ public class SqlTupleStream implements TupleStream {
 
             //Identify the primary key fields:
             List<SqlField> keyFields = new LinkedList<SqlField>();
-            for (Field k : tupleStreamKey.getFields()) {
+//            for (Field k : tupleStreamKey.getFields()) {
+            for (String pk : primaryKeys) {
                 boolean found = false;
-                String lookFor = extractColumnName(k.getExpression());
+                String lookFor = extractColumnName(pk);
                 for (SqlField af: allFields) {
                     if (lookFor.equals(af.getName())) {
                         found = true;
@@ -112,7 +131,35 @@ public class SqlTupleStream implements TupleStream {
                 }
             }
 
-            schema = new SqlSchema(tupleStreamKey, allFields, keyFields);
+            // Create the primary Key.
+            this.tupleStreamKey = new TupleStreamKey (keyFields);
+            // Save the raw fields just in case we need this.
+
+
+            List<SqlField> compareFields = new ArrayList<SqlField>(allFields);
+
+            if (excludeFieldNames != null) {
+                for (String excludeName : excludeFieldNames) {
+                    SqlField field = find (excludeName, this.allFields);
+                    compareFields.remove(field);
+                }
+            }
+            else if (includeFieldNames!=null) {
+                compareFields.clear();
+                for (String includeName : includeFieldNames) {
+                    SqlField field = find(includeName, this.allFields);
+                    compareFields.add(field);
+                }
+
+            }
+
+            // Remove all primary key fields from comparison:
+            for (SqlField k : keyFields) {
+                SqlField f = find (k.getName(), this.allFields);
+                compareFields.remove(f);
+            }
+
+            schema = new SqlSchema(tupleStreamKey, keyFields, compareFields, allFields);
             schema.setVendor(connection.getMetaData().getDatabaseProductName());
             schema.setVersion(connection.getMetaData().getDatabaseProductVersion());
         }
@@ -121,6 +168,14 @@ public class SqlTupleStream implements TupleStream {
                     this, se);
         }
         return schema ;
+    }
+
+    private SqlField find (String name, Collection <SqlField> fields) {
+        if (name == null) return null;
+        for (SqlField f : fields) {
+            if (f.getName().toUpperCase().equals(name.toUpperCase())) return f;
+        }
+        return null;
     }
 
     protected static String extractColumnName (String string) {
@@ -156,8 +211,11 @@ public class SqlTupleStream implements TupleStream {
         try {
             init ();
 //            monitor.handleEvent(this, STATE.RUNNING, "QUERY_START");
+            logger.info("Begin executing query for " + name);
             rs = stmt.executeQuery();
+            logger.info("End executing query for " + name);
             buffer(bufferSize);
+            logger.info("Completed TupleStream open for " + name);
 //            monitor.handleEvent(this, STATE.RUNNING, "QUERY_END");
         }
         catch (Exception e) {
@@ -172,7 +230,10 @@ public class SqlTupleStream implements TupleStream {
     protected int buffer(int num) throws SQLException {
         assert (num>0);
         for (int i=0; i<num; i++) {
-            if (rs.next()) {
+            if (rs.isClosed()) {
+                return 0;
+            }
+            else if (rs.next()) {
                 Tuple tuple = createTuple(rs);
                 buffer.add(tuple);
             }
@@ -248,14 +309,21 @@ public class SqlTupleStream implements TupleStream {
         this.name = name;
     }
 
-    public Monitor getMonitor() {
-        return monitor;
+    public String[] getIncludeFieldNames() {
+        return includeFieldNames;
     }
 
-    public void setMonitor(Monitor monitor) {
-        this.monitor = monitor;
+    public void setIncludeFieldNames(String[] includeFieldNames) {
+        this.includeFieldNames = includeFieldNames;
     }
 
+    public String[] getExcludeFieldNames() {
+        return excludeFieldNames;
+    }
+
+    public void setExcludeFieldNames(String[] excludeFieldNames) {
+        this.excludeFieldNames = excludeFieldNames;
+    }
 
     @Override
     public TupleStreamKey getTupleStreamKey() {
@@ -296,17 +364,9 @@ public class SqlTupleStream implements TupleStream {
         }
     }
 
-    public String getSql() {
-        return baseSql;
-    }
-
-    public void setSql(String sql) {
-        this.baseSql = sql;
-    }
-
     protected static class OracleSqlTupleStream extends SqlTupleStream {
-        public OracleSqlTupleStream (Connection connection) {
-            super(connection);
+        public OracleSqlTupleStream (Connection connection, String sql, String [] primaryKeys) {
+            super(connection, sql, primaryKeys);
         }
 
         @Override
@@ -337,8 +397,8 @@ public class SqlTupleStream implements TupleStream {
     }
 
     protected static class SQLServerTupleStream extends SqlTupleStream {
-        public SQLServerTupleStream(Connection connection) {
-            super(connection);
+        public SQLServerTupleStream(Connection connection, String sql, String [] primaryKeys) {
+            super(connection, sql, primaryKeys);
         }
 
         @Override
@@ -354,4 +414,5 @@ public class SqlTupleStream implements TupleStream {
             }
         }
     }
+
 }

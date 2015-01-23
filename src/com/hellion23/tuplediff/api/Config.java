@@ -1,13 +1,11 @@
 package com.hellion23.tuplediff.api;
 
+import com.hellion23.tuplediff.api.comparator.FieldComparator;
 import com.hellion23.tuplediff.api.listener.CompareEventListener;
 import com.hellion23.tuplediff.api.monitor.Monitor;
 import com.hellion23.tuplediff.api.monitor.Nameable;
 
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Created by Hermann on 9/28/2014.
@@ -15,22 +13,21 @@ import java.util.Map;
 public class Config implements Nameable {
     TupleStream leftStream;
     TupleStream rightStream;
-    TupleStreamKey tupleStreamKey;
-    Monitor monitor;
     String name;
-    CompareEventListener compareEventListener;
-    Collection<CompareEvent> drainTo;
+    List<FieldComparator> comparatorOverrides;
 
-    public Collection<CompareEvent> getDrainTo() {
-        return drainTo;
+    public Config () {
+        this (null);
     }
 
-    public void setDrainTo(Collection<CompareEvent> compareEvents) {
-        this.drainTo = compareEvents;
+    public Config (String name) {
+        if (name == null) {
+            this.name = "Unnamed TupleComparison # " + System.currentTimeMillis();
+        }
+        else {
+            this.name = name;
+        }
     }
-
-    Map<Field, Comparator<Comparable>> fieldComparatorOverrides = new HashMap<Field, Comparator<Comparable>>();
-    Map<Class, Comparator<Comparable>> classComparatorOverrides = new HashMap<Class, Comparator<Comparable>>();
 
     @Override
     public void setName(String name) {
@@ -58,28 +55,24 @@ public class Config implements Nameable {
         this.rightStream = rightStream;
     }
 
-    public TupleStreamKey getTupleStreamKey() {
-        return tupleStreamKey;
+    public List<FieldComparator> getComparatorOverrides() {
+        return comparatorOverrides;
     }
 
-    public void setTupleStreamKey(TupleStreamKey tupleStreamKey) {
-        this.tupleStreamKey = tupleStreamKey;
-    }
-
-    public Monitor getMonitor() {
-        return monitor;
-    }
-
-    public void setMonitor(Monitor monitor) {
-        this.monitor = monitor;
-    }
-
-    public CompareEventListener getCompareEventListener() {
-        return compareEventListener;
-    }
-
-    public void setCompareEventListener(CompareEventListener compareEventListener) {
-        this.compareEventListener = compareEventListener;
+    /**
+     * FieldComparator overrides are evaluated in the order that they are defined in the list; i.e. the first
+     * FieldComparator.compareWith(field) that returns true in the list will be the one that will be used for this field.
+     * That means the most restrictive Comparators should be defined first, and the least restrictive, last.
+     * For example, all Field Name specific comparators should be first in the list and Field Class based
+     * comparators should go last (ordered by instanceof class hierarchy).
+     *
+     * Use FieldComparatorFactory's createByFieldName or createByBaseClass to create a FieldComparator that associates
+     * a field name or class to a particular Comparator.
+     *
+     * @param comparatorOverrides
+     */
+    public void setComparatorOverrides(List<FieldComparator> comparatorOverrides) {
+        this.comparatorOverrides = comparatorOverrides;
     }
 
 }

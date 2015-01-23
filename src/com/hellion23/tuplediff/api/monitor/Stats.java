@@ -1,14 +1,18 @@
 package com.hellion23.tuplediff.api.monitor;
 
+import com.hellion23.tuplediff.api.Field;
+
 import java.util.Date;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Created by margaret on 9/30/2014.
  */
 public class Stats implements Nameable {
-    protected long startTime;
-    protected long endTime;
+    private static final Logger logger = Logger.getLogger(Stats.class.getName());
+    protected long startTime = 0;
+    protected long endTime = 0;
     Exception exception;
     Nameable source;
     String name;
@@ -39,9 +43,11 @@ public class Stats implements Nameable {
     public void event (String event, Object ...params) {
         switch (event) {
             case Monitor.EVENT_START:
+                logger.info(source.getName() + " EVENT START ");
                 startTime = System.currentTimeMillis();
                 break;
             case Monitor.EVENT_STOP_NORMAL:
+                logger.info(source.getName() + " EVENT END ");
                 endTime = System.currentTimeMillis();
                 break;
             case Monitor.EVENT_STOP_ABNORMAL:
@@ -66,6 +72,6 @@ public class Stats implements Nameable {
     }
 
     public String toString () {
-        return this.name + "\n Total Runtime: " + (endTime - startTime) + " ms. " ;
+        return this.name + " Total Runtime: " + (endTime - startTime) + " ms. \n" ;
     }
 }

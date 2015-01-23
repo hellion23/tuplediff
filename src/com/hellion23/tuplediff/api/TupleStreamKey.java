@@ -1,5 +1,6 @@
 package com.hellion23.tuplediff.api;
 
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -19,17 +20,21 @@ import java.util.List;
  */
 public class TupleStreamKey
 {
-    List<Field> fields;
+    List<? extends Field> fields;
 
-    public TupleStreamKey(List<Field> fields) {
+    public TupleStreamKey () {
+        fields = new LinkedList<Field>();
+    }
+
+    public TupleStreamKey(List<? extends Field> fields) {
         this.fields = fields;
     }
 
-    public List<Field> getFields() {
+    public List<? extends Field> getFields() {
         return fields;
     }
 
-    public void setFields(List<Field> fields) {
+    public void setFields(List<? extends Field> fields) {
         this.fields = fields;
     }
 

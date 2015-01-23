@@ -3,6 +3,7 @@ package com.hellion23.tuplediff.api.monitor;
 import com.hellion23.tuplediff.api.*;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -12,17 +13,30 @@ import java.util.logging.Logger;
  */
 public class TupleComparisonMonitor implements Monitor {
     private static final Logger logger = Logger.getLogger(TupleComparisonMonitor.class.getName());
-
+    TupleStream leftStream, rightStream;
     TupleComparison tc;
     protected Map<Nameable, Stats> allStats = new HashMap<Nameable, Stats>();
 
-    public TupleComparisonMonitor (TupleComparison tc, Config config) {
+    public void setTupleComparison (TupleComparison tc) {
         this.tc = tc;
-        allStats.put(tc, new TCSTats(tc));
-        allStats.put(config.getLeftStream(), new Stats(config.getLeftStream()));
-        allStats.put(config.getRightStream(), new Stats(config.getRightStream()));
     }
 
+    @Override
+    public void setLeftStream(TupleStream leftStream) {
+        this.leftStream = leftStream;
+    }
+
+    @Override
+    public void setRightStream(TupleStream rightStream) {
+        this.rightStream = rightStream;
+    }
+
+    @Override
+    public void init() {
+        allStats.put(leftStream, new Stats(leftStream));
+        allStats.put(rightStream, new Stats(rightStream));
+        allStats.put(tc, new CompareStats(tc));
+    }
 
     @Override
     public void reportEvent(Nameable source, String eventName, Object... params) throws TupleDiffException {
@@ -32,8 +46,23 @@ public class TupleComparisonMonitor implements Monitor {
 
 
     @Override
-    public Map <Nameable, Stats> getStats() {
+    public Map <Nameable, Stats> getAllStats() {
         return allStats;
+    }
+
+    @Override
+    public CompareStats getCompareStats() {
+        return (CompareStats) allStats.get(tc);
+    }
+
+    @Override
+    public Stats getLeftStats() {
+        return allStats.get(leftStream);
+    }
+
+    @Override
+    public Stats getRightStats() {
+        return allStats.get(rightStream);
     }
 
 
@@ -54,75 +83,4 @@ public class TupleComparisonMonitor implements Monitor {
         this.tc.cancel();
     }
 
-    /**
-     * Created by margaret on 9/30/2014.
-     */
-    public static class TCSTats extends Stats {
-
-        protected int totalOnlyLeft;
-        protected int totalOnlyRight;
-        protected int totalLeft;
-        protected int totalRight;
-        protected int totalBreaks;
-        protected int totalMatched;
-
-        public TCSTats (Nameable source) {
-            super(source);
-        }
-
-        public int getTotalOnlyLeft() {
-            return totalOnlyLeft;
-        }
-
-        public int getTotalOnlyRight() {
-            return totalOnlyRight;
-        }
-
-        public int getTotalLeft() {
-            return totalLeft;
-        }
-
-        public int getTotalRight() {
-            return totalRight;
-        }
-
-        public int getTotalBreaks() {
-            return totalBreaks;
-        }
-
-        public int getTotalMatched() {
-            return totalMatched;
-        }
-
-        public void event(String event, Object ... params) {
-            switch (event) {
-                case "COMPARE_EVENT":
-                    switch ((CompareEvent.TYPE)params[0]) {
-                        case DATA_LEFT:
-                            totalLeft++;
-                            break;
-                        case DATA_RIGHT:
-                            totalRight++;
-                            break;
-                        case LEFT_BREAK:
-                            totalOnlyLeft++;
-                            break;
-                        case RIGHT_BREAK:
-                            totalOnlyRight++;
-                            break;
-                        case PAIR_BREAK:
-                            totalBreaks++;
-                            break;
-                        case PAIR_MATCHED:
-                            totalMatched++;
-                            break;
-                    }
-                    break;
-                default:
-                    super.event(event, params);
-                    break;
-            }
-        }
-
-    }
 }

@@ -2,6 +2,8 @@ package com.hellion23.tuplediff.api;
 
 import com.hellion23.tuplediff.api.monitor.Nameable;
 
+import java.util.logging.Logger;
+
 /**
  * @author: Hermann Leung
  * Date: 6/3/14
@@ -37,7 +39,9 @@ public class Field implements Nameable, Comparable <Field> {
 
     @Override
     public final int compareTo(Field field) {
-        if (field == null) return -1;
+        if (field == null) {
+            return -1;
+        }
         else {
             return name.compareTo(field.getName());
         }
@@ -45,9 +49,13 @@ public class Field implements Nameable, Comparable <Field> {
 
     @Override
     public boolean equals (Object f) {
-        if (f instanceof Field)
+        if (! (f instanceof Field))
             return false;
         else
             return compareTo((Field)f) == 0;
+    }
+
+    public String toString () {
+        return name +  ":[" + fieldClass.getName() + "]";
     }
 }
