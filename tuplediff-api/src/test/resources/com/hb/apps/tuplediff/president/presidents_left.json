@@ -1,0 +1,47 @@
+{
+  "presidents" : [
+    {
+      "president_id" : 1,
+      "first_name" : "JIMMY",
+      "last_name" : "CARTER",
+      "president_no" : 39,
+      "dob" : 1924
+    },
+    {
+      "president_id" : 2,
+      "first_name" : "BARRACK",
+      "last_name" : "OBAMA",
+      "president_no" : 44,
+      "dob" : 1961
+    },
+    {
+      "president_id" : 3,
+      "first_name" : "GEORGE W.",
+      "last_name" : "BUSH",
+      "president_no" : 43,
+      "dob" : 1946
+    },
+
+    {
+      "president_id" : 4,
+      "first_name" : "BILL",
+      "last_name" : "CLINTON",
+      "president_no" : 42,
+      "dob" : 1946
+    },
+    {
+      "president_id" : 5,
+      "first_name" : "GEORGE H.W.",
+      "last_name" : "BUSH",
+      "president_no" : 41,
+      "dob" : 1924
+    },
+    {
+      "president_id" : 7,
+      "first_name" : "RICHARD",
+      "last_name" : "NIXON",
+      "president_no" : 36,
+      "dob" : 1913
+    }
+  ]
+}

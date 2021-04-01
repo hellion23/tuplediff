@@ -1,0 +1,93 @@
+<tuplediff>
+    <name>EZE_VPM_TRADE_COMPARISON</name>
+    <primarykey>TRADE_ID</primarykey>
+
+    <left _type="DBStreamConfig">
+        <name>EZE</name>
+        <datasource hbdbid="eze-oms-production"/>
+        <sql>
+            <![CDATA[
+declare @asof datetime  set @asof = dateadd(dd, datediff(dd,0, getDate()), 0)
+declare @asof_yest datetime set @asof_yest = @asof - 1
+declare @s_asof varchar(10) set @s_asof = CONVERT(varchar, @asof, 112) + '%'
+declare @s_asof_yest varchar(10) set @s_asof_yest = CONVERT(varchar, @asof_yest, 112) + '%'
+--SQL_START
+select
+substring([TRADE_ID], 1, 12) AS TRADE_ID,
+T.TRADE_DATE,
+t.SECURITY_ID,
+t.MANAGER_ID OWNER_CODE,
+--t.AMOUNT,
+SUM(L.SHARES) AMOUNT,
+T.TIME,
+T.STATUS,
+T.ALLOCATION_TRADE_ID
+from [CustomApp].[dbo].[FACT_TRADE_VW] t
+LEFT JOIN [CUSTOMAPP]..FACT_ALLOCATIONS L ON L.ALLOCATION_TRADE_ID = T.ALLOCATION_TRADE_ID
+where
+T.STATUS = 'A'
+and (TRADE_ID like @s_asof or TRADE_ID like @s_asof_yest)
+--AND (T.TRADE_DATE = @asof_yest OR T.TRADE_DATE = @asof)
+AND L.TRADE_STATUS = 'ACTIVE'
+GROUP BY substring([TRADE_ID], 1, 12), T.SECURITY_ID, T.MANAGER_ID, T.TIME
+, T.TRADE_DATE, T.STATUS,T.ALLOCATION_TRADE_ID
+union
+select
+substring([TRADE_ID], 1, 12) AS TRADE_ID,
+T.TRADE_DATE,
+t.SECURITY_ID,
+t.MANAGER_ID OWNER_CODE,
+--t.AMOUNT,
+SUM(L.SHARES) AMOUNT,
+T.TIME,
+T.STATUS,
+T.ALLOCATION_TRADE_ID
+from [CustomApp].[dbo].[FACT_TRADE_ARCH_VW] t
+LEFT JOIN [CUSTOMAPP]..FACT_ALLOCATIONS L ON L.ALLOCATION_TRADE_ID = T.ALLOCATION_TRADE_ID
+where
+T.STATUS = 'A'
+and (TRADE_ID like @s_asof or TRADE_ID like @s_asof_yest)
+--AND (T.TRADE_DATE = @asof_yest OR T.TRADE_DATE = @asof)
+AND L.TRADE_STATUS = 'ACTIVE'
+GROUP BY substring([TRADE_ID], 1, 12), T.SECURITY_ID, T.MANAGER_ID, T.TIME
+, T.TRADE_DATE, T.STATUS,T.ALLOCATION_TRADE_ID
+--SQL_END
+
+        ]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <name>VPM</name>
+        <datasource hbdbid="vpm-full-production"/>
+        <sql>
+            <![CDATA[
+        declare @asof datetime  set @asof = dateadd(dd, datediff(dd,0, getDate()), 0)
+        declare @asof_yest datetime set @asof_yest = @asof - 1
+        --SQL_START
+        select
+        SUBSTRING(ExtRefnum, 1, 12) AS TRADE_ID,
+        symbol.SyCode as SECURITY_ID,
+        ow.owcode OWNER_CODE,
+        SUM(abs(ba.Qty)) AMOUNT,
+        MAX(BA.LastDateTime) TIME
+        from
+        vpm..ba  ba WITH (NOLOCK)
+        LEFT join vpm..Sy symbol WITH(NOLOCK) on ba.SyId = symbol.SyId
+        LEFT join vpm..sn WITH(NOLOCK) on sn.snId = ba.SnId
+        LEFT join vpm..Ow WITH(NOLOCK) on ow.OwId = sn.OwId
+        where
+        (
+                ba.ExtRefNum like CONVERT(varchar, @asof_yest, 112) + '%'
+                or
+                ba.ExtRefNum like CONVERT(varchar, @asof, 112) + '%'
+        )
+        AND (STATUS='A')
+        GROUP BY SUBSTRING(ExtRefnum, 1, 12), symbol.SyCode, ow.owcode
+        --SQL_END
+
+        ]]>
+        </sql>
+    </right>
+
+    <excludefields>SECURITY_ID,OWNER_CODE,TIME</excludefields>
+</tuplediff>

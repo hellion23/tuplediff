@@ -1,0 +1,154 @@
+<tuplediff>
+    <primarykey>SEC_CODE,EVENT_TYPE_CD,EX_DATE</primarykey>
+    <left _type="DBStreamConfig">
+        <name>BBG</name>
+        <datasource hbdbid="paladyne-secmaster-production"/>
+        <sql>
+            <![CDATA[
+
+
+select
+ids.SEC_CODE
+, ids.BLMBRG_ID BLOOMBERG_ID
+, 'DIV' EVENT_TYPE_CD
+--, 'Cash' DVD_TYPE
+--, dd.BloombergCompanyID
+--, dd.SecIDtype
+--, dd.SecID
+--, dd.MarketSectorDescription
+--, dd.BloombergUniqueID
+--, dd.ID_BB_GLOBAL
+, dd.Eff_date EX_DATE
+, dd.CP_RECORD_DT RECORD_DATE
+, dd.CP_PAY_DT PAY_DATE
+, dd.CURRENCY
+--, dd.CP_NET_AMT
+--, dd.CP_TAX_AMT
+--, dd.CP_GROSS_AMT
+, dd.CP_GROSS_AMT * 100 PRICE -- Convert to minor ccy.
+--, dd.ChangeDate
+--, dd.OriginalDate
+--, dd.*
+from BBGSecMaster..DVD_CASH dd
+--join BBgSecmaster..LU_CP_DVD_STOCK_TYP st on st.CP_DVD_STOCK_TYP = dd.CP_DVD_STOCK_TYP
+join PalCustomApp..SEC_ID_ACTIVE ids on ids.BBG_ALT_ID = dd.ID_BB_GLOBAL
+join (
+	select
+	sy.syid, sy.SyCode
+	from [vpm].vpm.dbo.LPD
+	join [vpm].vpm.dbo.Ev on lpd.OEvId = ev.EvId
+	join [vpm].vpm.dbo.sy on sy.SyId = ev.SyId
+	where lpd.CEvId is null
+	--and sy.sycode = '0016.HK'
+	group by sy.syid, sy.SyCode
+) pos on  pos.sycode = ids.SEC_CODE
+where
+--dd.BloombergUniqueID = 'EQ0011506400001000'
+dd.Eff_date between GETDATE() and GETDATE()+60
+
+]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <name>MKT</name>
+        <datasource hbdbid="dwv2-production"/>
+        <sql>
+            <![CDATA[
+
+with sst as (
+                     SELECT SOURCE,
+                            SECURITY_ID,
+                            EVENT_TYPE_CD,
+                            EX_DATE_ID,
+                            RECORD_DATE_ID,
+                            PAY_DATE_ID,
+                            SUM (PRICE) AS PRICE,
+                            CURRENCY_ID
+                       FROM (SELECT 'SST' AS SOURCE,
+                                    C.SECURITY_ID AS SECURITY_ID,
+                                    CASE
+                                       WHEN C.EVENT_TYPE_NAME IN
+                                               ('Cash Dividend',
+                                                'Cash Dividend -Optional',
+                                                'Dividend Reinvestment',
+                                                'Dividend Reinvestment - Optional',
+                                                'Dividend Option',
+                                                'Decrease In Value')
+                                       THEN
+                                          'DIV'
+                                       WHEN C.EVENT_TYPE_NAME IN
+                                               ('Stock Split',
+                                                'Reverse Stock Split')
+                                       THEN
+                                          'SPL'
+                                    END
+                                       AS EVENT_TYPE_CD,
+                                    C.EX_DATE_ID AS EX_DATE_ID,
+                                    C.RECORD_DATE_ID AS RECORD_DATE_ID,
+                                    C.PAY_DATE_ID AS PAY_DATE_ID,
+                                    CASE
+                                       WHEN C.EVENT_TYPE_NAME IN
+                                               ('Cash Dividend',
+                                                'Cash Dividend -Optional',
+                                                'Dividend Reinvestment',
+                                                'Dividend Reinvestment - Optional',
+                                                'Dividend Option',
+                                                'Decrease In Value')
+                                       THEN
+                                          C.GROSS_RATE * 100
+                                       WHEN C.EVENT_TYPE_NAME IN
+                                               ('Stock Split',
+                                                'Reverse Stock Split')
+                                       THEN
+                                          C.NEW_RATE / C.OLD_RATE
+                                    END
+                                       AS PRICE,
+                                    C.CURRENCY_ID AS CURRENCY_ID
+                               FROM DW.FACT_CORP_ACT_EVENTS C
+                              WHERE C.APPROVAL_STATUS IN
+                                       ('APPROVED', 'UPDATED')
+                                    AND C.COMPLETENESS_STATUS = 'COMPLETE'
+                                    AND C.EVENT_TYPE_NAME IN
+                                           ('Cash Dividend',
+                                            'Cash Dividend -Optional',
+                                            'Dividend Reinvestment',
+                                            'Dividend Reinvestment - Optional',
+                                            'Dividend Option',
+                                            'Decrease In Value',
+                                            'Stock Split',
+                                            'Reverse Stock Split')) SST_EVENTS
+
+                   GROUP BY SOURCE,
+                            SECURITY_ID,
+                            EVENT_TYPE_CD,
+                            EX_DATE_ID,
+                            RECORD_DATE_ID,
+                            PAY_DATE_ID,
+                            CURRENCY_ID
+)
+select
+s.ticker SEC_CODE,
+s.BLOOMBERG_ALT_ID,
+sst.EVENT_TYPE_CD,
+to_date(sst.EX_DATE_ID, 'YYYYMMDD') EX_DATE,
+to_date(sst.RECORD_DATE_ID, 'YYYYMMDD') RECORD_DATE,
+to_date(sst.PAY_DATE_ID, 'YYYYMMDD') PAY_DATE,
+cu.currency_cd CURRENCY,
+sst.PRICE
+from sst
+join dw.dim_security s on sst.security_id = s.security_id
+join dw.dim_currency cu on cu.currency_id = sst.currency_id
+join (
+  select distinct SECURITY_ID from fact_pnl_symbol pos
+  where pos.date_id >= to_number(  to_char (trunc(sysdate), 'YYYYMMDD' ) )
+  and pos.open_close_ind = 'O'
+) pos on pos.security_id = s.security_id
+where
+sst.EX_DATE_ID between to_number(  to_char (trunc(sysdate), 'YYYYMMDD' ) )
+and  to_number(  to_char (trunc(sysdate+60), 'YYYYMMDD' ) )
+
+]]>
+        </sql>
+    </right>
+
+</tuplediff>

@@ -1,0 +1,135 @@
+<tuplediff>
+    <primarykey>PAL_MASTER_SEC_ID</primarykey>
+    <excludefields>TICKER</excludefields>
+    <name>CompareEC_HldLotVsSOD_POS</name>
+    <left _type="DBStreamConfig">
+        <datasource>
+            <hbdbid>eze-oms-qa</hbdbid>
+        </datasource>
+        <sql>select s.sec_alias2 pal_master_sec_id, pos.* &#xd;
+            from (&#xd;
+            SELECT &#xd;
+            p.Symbol TICKER, &#xd;
+            SUM(p.SHARES) QUANTITY&#xd;
+            FROM ec_HldLot p&#xd;
+            where PortCD not in (&#xd;
+            --TEST FUNDS&#xd;
+            'TVNT-TVNT',&#xd;
+            'TEST-TEST'&#xd;
+            )&#xd;
+            GROUP BY SYMBOL&#xd;
+            having sum(shares) &lt;&gt; 0&#xd;
+            ) pos&#xd;
+            join tr_sec s&#xd;
+            on pos.TICKER = s.SEC_SYM</sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <datasource>
+            <hbdbid>dw-qa</hbdbid>
+        </datasource>
+        <sql>WITH&#xd;
+            DW_POS AS&#xd;
+            (&#xd;
+            SELECT DISTINCT&#xd;
+            date_id,&#xd;
+            ticker                                                        AS dw_ticker,&#xd;
+            SECURITY_TYPE_CD,&#xd;
+            SUM(final_adj_quantity) OVER ( PARTITION BY date_id, ticker ) AS&#xd;
+            dw_quantity,&#xd;
+            sec.pal_master_sec_id&#xd;
+            FROM&#xd;
+            eze.rpt_eze_positions_vw pos&#xd;
+            JOIN dw.dim_security sec&#xd;
+            ON&#xd;
+            (&#xd;
+            sec.security_id = pos.security_id&#xd;
+            )&#xd;
+            JOIN dw.dim_substrategy sub&#xd;
+            ON&#xd;
+            (&#xd;
+            sub.substrategy_id = pos.substrategy_id&#xd;
+            )&#xd;
+            WHERE&#xd;
+            HCM_PORTFOLIO_ID NOT IN (10000152, 10000154, 10000155, 10000156,&#xd;
+            10000157, 10000158, 10000159, 10000148, 10000150, 10000151, 10000138,&#xd;
+            10000139, 10000140, 10000141, 10000142, 10000128, 10000130, 10000131,&#xd;
+            10000132, 10000133, 10000005, 10000135, 10000058, 10000186, 10000189,&#xd;
+            10000176, 100009, 10000177, 10000178, 10000179, 10000180, 10000181,&#xd;
+            10000182, 10000055, 10000168, 10000169, 10000170, 10000171, 10000172,&#xd;
+            10000173, 10000175, 10000160, 10000161, 10000162, 10000036, 10000164,&#xd;
+            10000165, 10000166, 10000167, 10000216, 10000218, 10000219, 10000093,&#xd;
+            10000208, 10000080, 10000209, 10000210, 10000212, 10000213, 10000214,&#xd;
+            10000215, 10000200, 10000201, 10000203, 10000076, 10000205, 10000206,&#xd;
+            10000207, 10000193, 10000194, 10000195, 10000196, 10000069, 10000197,&#xd;
+            10000198, 10000124, 10000125, 10000126, 10000112, 10000113, 10000114,&#xd;
+            10000115, 100000999,&#xd;
+            100009, -- TEST&#xd;
+            10000186 -- TVNT&#xd;
+            --10000231 -- excluding TSTD per pmorriss, pdharmal 08/07/2018&#xd;
+            )&#xd;
+            )&#xd;
+            ,&#xd;
+            FPS_ref AS&#xd;
+            (&#xd;
+            SELECT DISTINCT&#xd;
+            date_id,&#xd;
+            ticker,&#xd;
+            portfolio_cd&#xd;
+            FROM&#xd;
+            dw.facT_pnl_symbol f&#xd;
+            JOIN dw.dim_security sec&#xd;
+            ON&#xd;
+            (&#xd;
+            sec.security_id = f.security_id&#xd;
+            )&#xd;
+            JOIN dw.dim_substrategy sub&#xd;
+            ON&#xd;
+            (&#xd;
+            sub.substrategy_id = f.substrategy_id&#xd;
+            )&#xd;
+            WHERE&#xd;
+            date_id =&#xd;
+            (&#xd;
+            SELECT&#xd;
+            to_number(parameter_value)&#xd;
+            FROM&#xd;
+            EZE.EZE_PROCESS_CONTROL&#xd;
+            WHERE&#xd;
+            PARAMETER_NAME = 'SOD_DATE'&#xd;
+            AND PROCESS_NAME = 'EZE_POSITIONS'&#xd;
+            )&#xd;
+            AND open_close_ind        = 'O'&#xd;
+            AND HCM_PORTFOLIO_ID NOT IN (10000152, 10000154, 10000155, 10000156,&#xd;
+            10000157, 10000158, 10000159, 10000148, 10000150, 10000151, 10000138,&#xd;
+            10000139, 10000140, 10000141, 10000142, 10000128, 10000130, 10000131,&#xd;
+            10000132, 10000133, 10000005, 10000135, 10000058, 10000186, 10000189,&#xd;
+            10000176, 100009, 10000177, 10000178, 10000179, 10000180, 10000181,&#xd;
+            10000182, 10000055, 10000168, 10000169, 10000170, 10000171, 10000172,&#xd;
+            10000173, 10000175, 10000160, 10000161, 10000162, 10000036, 10000164,&#xd;
+            10000165, 10000166, 10000167, 10000216, 10000218, 10000219, 10000093,&#xd;
+            10000208, 10000080, 10000209, 10000210, 10000212, 10000213, 10000214,&#xd;
+            10000215, 10000200, 10000201, 10000203, 10000076, 10000205, 10000206,&#xd;
+            10000207, 10000193, 10000194, 10000195, 10000196, 10000069, 10000197,&#xd;
+            10000198, 10000124, 10000125, 10000126, 10000112, 10000113, 10000114,&#xd;
+            10000115, 100000999,&#xd;
+            100009, -- TEST&#xd;
+            10000186 -- TVNT&#xd;
+            --      10000231 -- excluding TSTD per pmorriss, pdharmal 08/07/2018&#xd;
+            )&#xd;
+            )&#xd;
+            SELECT&#xd;
+            dw_pos.pal_master_sec_id,&#xd;
+            DW_POS.DW_TICKER TICKER,&#xd;
+            DW_QUANTITY AS QUANTITY&#xd;
+            FROM&#xd;
+            DW_POS&#xd;
+            LEFT OUTER JOIN FPS_ref ON FPS_ref.ticker = dw_ticker&#xd;
+            where dw_quantity &lt;&gt; 0&#xd;
+            and SECURITY_TYPE_CD not in 'CUR'&#xd;
+            GROUP BY&#xd;
+            DW_POS.pal_master_sec_id,&#xd;
+            DW_POS.DW_TICKER,&#xd;
+            dw_quantity,&#xd;
+            SECURITY_TYPE_CD</sql>
+    </right>
+</tuplediff>

@@ -1,0 +1,22 @@
+{
+  "variables" : [ {
+    "@type" : "ScriptVariableConfig",
+    "name" : "SCRIPT",
+    "script" : "var df = java.time.format.DateTimeFormatter.ofPattern(\"YYYYMMdd\");\nvar prevWorkingDate = \"${TODAY.PREV_WORKING_DATE_ID}\";\nvar fromDate = java.time.LocalDate.now();\nvar toDate = fromDate.plusDays(5);\nvar fromStr = df.format(fromDate);\nvar toStr = df.format(toDate);\n"
+  }, {
+    "@type" : "KeyValueVariableConfig",
+    "name" : "FORMATTED_STR",
+    "value" : "${SCRIPT.fromStr}-${SCRIPT.toStr}"
+  }, {
+    "@type" : "KeyValueVariableConfig",
+    "name" : "TUPLEDIFF_QUERY",
+    "value" : "select * from DIM_COUNTRY"
+  }, {
+    "@type" : "SQLVariableConfig",
+    "columns" : "*",
+    "name" : "WATERMARK",
+    "hbdbid" : "dwv2-production",
+    "sql" : "select\nMAX(case when PARAMETER_NAME = 'START_DATE' THEN PARAMETER_VALUE ELSE NULL END) START_DATE,\nMAX(case when PARAMETER_NAME = 'DAYS_TO_LOAD' THEN PARAMETER_VALUE ELSE NULL END) DAYS_TO_LOAD\nFROM Etl_process_control \nwhere PROCESS_NAME = 'PRICE_MASTER'",
+    "singleton" : true
+  } ]
+}

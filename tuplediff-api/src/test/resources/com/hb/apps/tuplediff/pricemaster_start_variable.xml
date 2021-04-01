@@ -1,0 +1,17 @@
+<variableconfigs>
+    <variable _type="SQLVariableConfig">
+        <name>ETL_PROCESS_CONTROL</name>
+        <hbdbid>dwv2-production</hbdbid>
+        <sql><![CDATA[
+                select process_name || '::' || parameter_name as PARAM_NAME, PARAMETER_VALUE from ETL_PROCESS_CONTROL
+        ]]></sql>
+        <primarykey>PARAM_NAME</primarykey>
+    </variable>
+    <variable _type="SQLVariableConfig">
+        <name>TODAY</name>
+        <hbdbid>dwv2-production</hbdbid>
+        <sql><![CDATA[
+                select * from dim_date where calendar_date = trunc(sysdate)
+        ]]></sql>
+    </variable>
+</variableconfigs>

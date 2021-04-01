@@ -1,0 +1,69 @@
+<tuplediff>
+    <name>EZE_VPM_TRADE_COMPARISON</name>
+    <primarykey>TRADE_ID</primarykey>
+
+    <left _type="DBStreamConfig">
+        <datasource hbdbid="eze-oms-production"/>
+        <sql>
+<![CDATA[
+declare @asof datetime  set @asof = dateadd(dd, datediff(dd,0, getDate()), 0)
+declare @asof_yest datetime set @asof_yest = @asof - 1
+declare @s_asof varchar(10) set @s_asof = CONVERT(varchar, @asof, 112) + '%'
+declare @s_asof_yest varchar(10) set @s_asof_yest = CONVERT(varchar, @asof_yest, 112) + '%'
+--SQL_START
+select substring([TRADE_ID], 1, 12) AS TRADE_ID,
+t.SECURITY_ID,
+t.MANAGER_ID OWNER_CODE,
+t.AMOUNT
+--,t.*
+from [CustomApp].[dbo].[FACT_TRADE_VW] t
+--left join CustomApp..DIM_MANAGER_VW m on m.MANAGER_ID = t.MANAGER_ID
+where STATUS = 'A'
+and (TRADE_ID like @s_asof or TRADE_ID like @s_asof_yest)
+union
+select substring([TRADE_ID], 1, 12) AS TRADE_ID,
+t.SECURITY_ID,
+t.MANAGER_ID OWNER_CODE,
+t.AMOUNT
+from [CustomApp].[dbo].[FACT_TRADE_ARCH_VW] t
+--left join CustomApp..DIM_MANAGER_VW m on m.MANAGER_ID = t.MANAGER_ID
+where STATUS = 'A'
+and (TRADE_ID like @s_asof or TRADE_ID like @s_asof_yest)
+--SQL_END
+]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <datasource hbdbid="vpm-full-production"/>
+        <sql>
+<![CDATA[
+declare @asof datetime  set @asof = dateadd(dd, datediff(dd,0, getDate()), 0)
+declare @asof_yest datetime set @asof_yest = @asof - 1
+--SQL_START
+select
+SUBSTRING(ExtRefnum, 1, 12) AS TRADE_ID,
+symbol.SyCode as SECURITY_ID,
+'N/A' OWNER_CODE,
+SUM(ba.Qty) AMOUNT
+from
+vpm..ba  ba WITH (NOLOCK)
+LEFT join vpm..Sy symbol WITH(NOLOCK) on ba.SyId = symbol.SyId
+LEFT join vpm..sn WITH(NOLOCK) on sn.snId = ba.SnId
+LEFT join vpm..Ow WITH(NOLOCK) on ow.OwId = sn.OwId
+where
+(
+	ba.ExtRefNum like CONVERT(varchar, @asof_yest, 112) + '%'
+	or
+	ba.ExtRefNum like CONVERT(varchar, @asof, 112) + '%'
+)
+AND (STATUS='A')
+--AND ba.ExtRefNum LIKE '2017090500WT%'
+GROUP BY SUBSTRING(ExtRefnum, 1, 12), symbol.SyCode
+--SQL_END
+]]>
+        </sql>
+    </right>
+
+    <excludefields>SECURITY_ID,OWNER_CODE,AMOUNT</excludefields>
+
+</tuplediff>

@@ -1,0 +1,100 @@
+
+<tuplediff>
+    <!-- BEGIN MANDATORY definitions-->
+
+    <!-- How the TDStream's tuples should be sorted -->
+    <primarykey>ID,CURRENCY</primarykey>
+
+    <!-- _type defines the stream type. Options are DBStreamConfig for SQL queries and CSVStreamConfig
+        for CSV files-->
+    <left _type="DBStreamConfig">
+        <datasource>
+            <hbdbid>dwv2-production</hbdbid>
+        </datasource>
+        <sql><![CDATA[select *
+from (select
+--to_char (vpm_country_id) id,
+vpm_country_id id,
+country_cd, UPDATED_TIMESTAMP,
+null IGNORE_FIELD, 1.001 NUM_FIELD, '1.000' NUM_AS_STR_FIELD,
+OFFICIAL_CURRENCY_CD CURRENCY, COUNTRY_DESC
+from dim_country where country_id > 0 and vpm_country_id is not null
+) a
+]]></sql>
+    </left>
+
+    <right _type="CSVStreamConfig">
+        <file>h:\tmp\tuplediff\countries.csv</file>
+        <!--TODO: implement. The idea here is to sort a csv file externally and use the sorted file if the file is the same -->
+        <!-- Currently TDCompare will always assume file is unsorted and will do an in-memory sort. -->
+        <sort>
+            <sorted>false</sorted>
+            <workdir>H:\tmp\tuplediff</workdir>
+        </sort>
+    </right>
+    <!-- END MANDATORY definitions-->
+
+    <!-- BEGIN OPTIONAL definitions -->
+    <!-- This is a unique key that will appear in logs -->
+    <name>VPM_DW2_COUNTRY_COMPARISON</name>
+
+    <!-- Fields defined here will not be compared. -->
+    <excludefields>IGNORE_FIELD</excludefields>
+
+    <!-- Define comparators used for this comparison. Note that the COMPARATOR chosen will be done in the order
+    that is listed here. The first match found will be used as the COMPARATOR. In other words comparators that
+     are more specific (i.e. field name based comparators) should be listed BEFORE the more generic class
+     based comparators.
+    -->
+    <fieldcomparators>
+        <fieldcomparator>
+            <fieldnames>UPDATED_TIMESTAMP</fieldnames>
+            <class>ThresholdLocalDateTimeComparator</class>
+        </fieldcomparator>
+        <fieldcomparator>
+            <fieldnames>NUM_FIELD</fieldnames>
+            <class>ThresholdNumberComparator</class>
+            <params>
+                <param name="threshold">.01</param>
+            </params>
+        </fieldcomparator>
+        <fieldcomparator>
+            <fieldclasses>Float,Double</fieldclasses>
+            <class>ThresholdNumberComparator</class>
+        </fieldcomparator>
+        <fieldcomparator>
+            <fieldclasses>java.sql.Timestamp</fieldclasses>
+            <class>TruncateDateComparator</class>
+            <params>
+                <param name="truncateTo">MILLIS</param>
+            </params>
+        </fieldcomparator>
+    </fieldcomparators>
+
+
+    <!--
+    Define type formatters. These transform the Class of the value to another Class. This is primarily
+    used to parse Strings into a Date or a Number object for more accurate/nuanced comparisons.
+    -->
+    <fieldtypeformatters>
+        <fieldtypeformatter>
+            <!-- Side to format: LEFT, RIGHT or BOTH. -->
+            <side>BOTH</side>
+            <fieldnames>NUM_AS_STR_FIELD</fieldnames>
+            <from>String</from>
+            <to>BigDecimal</to>
+        </fieldtypeformatter>
+    </fieldtypeformatters>
+    <fieldtypeformatters>
+        <fieldtypeformatter>
+            <!-- Side to format: LEFT, RIGHT or BOTH. -->
+            <side>RIGHT</side>
+            <fieldnames>UPDATED_TIMESTAMP</fieldnames>
+            <!--Standard DATE_TIME_FORMATTER pattern. Special custom handling is denoted by text enclosed
+             in tilde E.g. ~FRACTION_OF_MILLI~ which have variable length numbers-->
+            <pattern>yyyy-MM-dd HH:mm:ss~FRACTION_OF_MILLI~</pattern>
+            <to>LocalDateTime</to>
+        </fieldtypeformatter>
+    </fieldtypeformatters>
+    <!--END OPTIONAL definitions -->
+</tuplediff>

@@ -1,0 +1,32 @@
+<tuplediff>
+    <name>EZE-OMS-VIEW-COMPARISON</name>
+
+    <!-- How the TDStream's tuples should be sorted. Commma delimited -->
+    <primarykey>ALLOCATION_ID</primarykey>
+
+    <left _type="DBStreamConfig">
+        <datasource hbdbid="eze-oms-production"/>
+        <sql>
+            <![CDATA[
+        SELECT ALLOCATION_ID, ALLOCATION_TRADE_ID, SECURITY_ID, PORTFOLIO_CD, SUBSTRATEGY, CURRENCY_CD, SHARES, EZE_PORTFOLIO_ID, EXECUTION_BROKER_ID,
+              TRADE_DATE, SETTLE_DATE
+        FROM CustomApp.dbo.FACT_ALLOCATION_ARCH_VW ARCH_VW
+        WHERE ARCH_VW.TRADE_DATE BETWEEN convert(date, '20170831') AND convert(date, '20170901')
+            ]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <datasource hbdbid="eze-oms-production"/>
+        <sql>
+            <![CDATA[
+        SELECT ALLOCATION_ID, ALLOCATION_TRADE_ID, SECURITY_ID, PORTFOLIO_CD, SUBSTRATEGY, CURRENCY_CD, SHARES, EZE_PORTFOLIO_ID, EXECUTION_BROKER_ID,
+              TRADE_DATE, SETTLE_DATE FROM
+        CustomApp.dbo.FACT_ALLOCATIONS
+        WHERE TRADE_DATE BETWEEN convert(date, '20170831') AND convert(date, '20170901')
+
+            ]]>
+        </sql>
+    </right>
+
+
+</tuplediff>

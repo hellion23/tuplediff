@@ -1,0 +1,22 @@
+{
+  "validates" : [
+    {
+      "pk" : [4],
+      "break_type" : "FOUND_BREAK" ,
+      "break_fields" : ["DOB"]
+    },
+    {
+      "pk" : [5],
+      "break_type" : "FOUND_BREAK" ,
+      "break_fields" : ["FIRST_NAME", "PRESIDENT_NO"]
+    },
+    {
+      "pk" : [6],
+      "break_type" : "FOUND_ONLY_RIGHT"
+    },
+    {
+      "pk" : [7],
+      "break_type" : "FOUND_ONLY_LEFT"
+    }
+  ]
+}

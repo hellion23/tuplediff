@@ -1,0 +1,28 @@
+<tuplediff>
+    <name>VPM_DW2_COUNTRY_COMPARISON</name>
+
+    <!-- How the TDStream's tuples should be sorted. Commma delimited -->
+    <primarykey>ID</primarykey>
+
+    <left _type="DBStreamConfig">
+        <datasource hbdbid="dwv2-production"/>
+        <sql>
+<![CDATA[
+            select *
+            from (select to_char (vpm_country_id) id, country_cd, UPDATED_TIMESTAMP,
+            null IGNORE_FIELD, 1.001 NUM_FIELD, 1.000 NUM_AS_STR_FIELD
+            from dim_country where country_id > 0 and vpm_country_id is not null
+            ) a
+]]>
+        </sql>
+    </left>
+    <right _type="CSVStreamConfig">
+        <file>h:\tmp\tuplediff\countries.csv</file>
+        <presort>
+            <workdir>H:\tmp\tuplediff</workdir>
+        </presort>
+    </right>
+
+    <excludefields>IGNORE_FIELD</excludefields>
+
+</tuplediff>

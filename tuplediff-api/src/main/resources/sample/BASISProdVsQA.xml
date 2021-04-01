@@ -1,0 +1,23 @@
+<tuplediff>
+    <name>BASIS_PROD_VS_QA</name>
+
+    <!-- How the TDStream's tuples should be sorted. Commma delimited -->
+    <primarykey>DATE_ID,FUND_CD,SUBSTRATEGY_CD,TICKER,CLEARING_BROKER_ACCOUNT_NUM,DEAL_DESC,CURRENCY_CD,POSITION_DIRECTION_IND,FUNCTIONAL_CURRENCY_ID</primarykey>
+
+    <left _type="DBStreamConfig">
+        <datasource hbdbid="dwv2-production"/>
+        <sql>
+            <![CDATA[
+    SELECT to_char ( date_id) DATE_ID,                                             df.FUND_CD,                                             dba.BROKER_CD,                                             dsub.SUBSTRATEGY_CD,                                             DS.TICKER,                                             DBA.CLEARING_BROKER_ACCOUNT_NUM,                                             DEAL.DEAL_DESC,                                             DC.CURRENCY_CD,                                            LC_STOCK_LOAN_FEE,                                             USD_STOCK_LOAN_FEE,                                             STOCK_LOAN_FEE_RATE,                                             FFC.POSITION_DIRECTION_IND,                         STOCK_LOAN_FEE_SOURCE,                                             FFC.FUNCTIONAL_CURRENCY_ID                                        FROM FACT_FINANCING_COSTS_XTD ffc                                             JOIN dim_fund df                                                ON df.fund_id = ffc.FUND_ID                                             JOIN DIM_SUBSTRATEGY dsub                                                ON (DSUB.SUBSTRATEGY_ID = ffc.SUBSTRATEGY_ID)                                             JOIN dim_security ds                                                ON (DS.SECURITY_ID = ffc.security_id)                                             JOIN DIM_CLEARING_BROKER_ACCOUNT dba                                                ON (DBA.CLEARING_BROKER_ACCOUNT_ID =                                                       ffc.CLEARING_BROKER_ACCOUNT_ID)                                             JOIN dim_deal Deal                                                ON (deal.deal_id = FFC.DEAL_ID)                                             JOIN dim_currency dc                                                ON (DC.CURRENCY_ID = FFC.LOCAL_CURRENCY_ID)                                       WHERE ffc.date_id BETWEEN 20140306 AND 20140306                         AND FUND_CD NOT IN ('STAR', 'STOP')
+]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <datasource hbdbid="dwv2-qa"/>
+        <sql>
+            <![CDATA[
+    SELECT to_char ( date_id) DATE_ID,                                            df.FUND_CD,                                            dba.BROKER_CD,                                            dsub.SUBSTRATEGY_CD,                                            DS.TICKER,                                            DBA.CLEARING_BROKER_ACCOUNT_NUM,                                            DEAL.DEAL_DESC,                                            DC.CURRENCY_CD,                                           LC_STOCK_LOAN_FEE,                                            USD_STOCK_LOAN_FEE,                                            STOCK_LOAN_FEE_RATE,                                            FFC.POSITION_DIRECTION_IND,                        STOCK_LOAN_FEE_SOURCE,                                            FFC.FUNCTIONAL_CURRENCY_ID                                       FROM FACT_FINANCING_COSTS_XTD ffc                                            JOIN dim_fund df                                               ON df.fund_id = ffc.FUND_ID                                            JOIN DIM_SUBSTRATEGY dsub                                               ON (DSUB.SUBSTRATEGY_ID = ffc.SUBSTRATEGY_ID)                                            JOIN dim_security ds                                               ON (DS.SECURITY_ID = ffc.security_id)                                            JOIN DIM_CLEARING_BROKER_ACCOUNT dba                                               ON (DBA.CLEARING_BROKER_ACCOUNT_ID =                                                      ffc.CLEARING_BROKER_ACCOUNT_ID)                                            JOIN dim_deal Deal                                               ON (deal.deal_id = FFC.DEAL_ID)                                            JOIN dim_currency dc                                               ON (DC.CURRENCY_ID = FFC.LOCAL_CURRENCY_ID)                                      WHERE ffc.date_id BETWEEN 20140306 AND 20140306                        AND FUND_CD NOT IN ('STAR', 'STOP')
+]]>
+        </sql>
+    </right>
+</tuplediff>

@@ -1,0 +1,7 @@
+president_id,first_name,last_name,president_no,dob,comments
+4,"BILL","CLINTON",42,1658,break dob
+3,"GEORGE W.","BUSH",43,1946,match
+5,"GEORGE X.","BUSH",42,1924,break on first name, president_no
+6,"RONALD","REAGAN",40,1911,extra row
+1,"JIMMY","CARTER",39,1924,match
+2,"BARRACK","OBAMA",44,1961,match

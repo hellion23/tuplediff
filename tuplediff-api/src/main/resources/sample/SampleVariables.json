@@ -1,0 +1,8 @@
+{
+  "variables" : [ {
+    "@type" : "SQLVariableConfig",
+    "name" : "TODAY",
+    "hbdbid" : "dwv2-production",
+    "sql" : "select * from DIM_DATE where calendar_date = trunc(sysdate)"
+  } ]
+}

@@ -1,0 +1,46 @@
+<tuplediff>
+    <primarykey>OBJ</primarykey>
+    <left _type="DBStreamConfig">
+        <name>FIN</name>
+        <datasource hbdbid="fin-production"/>
+        <sql>
+            <![CDATA[
+
+select 'SY' AS OBJ, MAX (sy.lastdatetime) LASTDATETIME from FIN.SY
+UNION
+SELECT 'BR' AS OBJ, MAX (BR.LASTDATETIME) LASTDATETIME FROM FIN.BR
+UNION
+SELECT 'CLRBRKACCT' AS OBJ, MAX(ClrBrkrAcct.LastDateTime) LASTDATETIME FROM FIN.ClrBrkrAcct
+UNION
+SELECT 'FN' AS OBJ, MAX(FN.LASTDATETIME) LASTDATETIME FROM FIN.FN
+
+]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <name>VPM</name>
+        <datasource hbdbid="vpm-full-production"/>
+        <sql>
+            <![CDATA[
+
+select 'SY' AS OBJ, MAX (sy.lastdatetime) LASTDATETIME from VPM..sy
+UNION
+SELECT 'BR' AS OBJ, MAX (BR.LASTDATETIME) LASTDATETIME FROM VPM..BR
+UNION
+SELECT 'CLRBRKACCT' AS OBJ, MAX(ClrBrkrAcct.LastDateTime) LASTDATETIME FROM VPM..ClrBrkrAcct
+UNION
+SELECT 'FN' AS OBJ, MAX(FN.LASTDATETIME) LASTDATETIME FROM VPM..FN
+
+]]>
+        </sql>
+    </right>
+    <fieldcomparators>
+        <fieldcomparator>
+            <fieldnames>LASTDATETIME</fieldnames>
+            <class>TruncateDateComparator</class>
+            <params>
+                <param name="truncateTo">MILLIS</param>
+            </params>
+        </fieldcomparator>
+    </fieldcomparators>
+</tuplediff>

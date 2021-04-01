@@ -1,0 +1,31 @@
+<variableconfigs>
+    <variable _type="ScriptVariableConfig">
+        <name>SCRIPT</name>
+        <script><![CDATA[var df = java.time.format.DateTimeFormatter.ofPattern("YYYYMMdd");
+var prevWorkingDate = "${TODAY.PREV_WORKING_DATE_ID}";
+var fromDate = java.time.LocalDate.now();
+var toDate = fromDate.plusDays(5);
+var fromStr = df.format(fromDate);
+var toStr = df.format(toDate);
+]]></script>
+    </variable>
+    <variable _type="KeyValueVariableConfig">
+        <name>FORMATTED_STR</name>
+        <value>${SCRIPT.fromStr}-${SCRIPT.toStr}</value>
+    </variable>
+    <variable _type="KeyValueVariableConfig">
+        <name>TUPLEDIFF_QUERY</name>
+        <value>select * from DIM_COUNTRY</value>
+    </variable>
+    <variable _type="SQLVariableConfig">
+        <columns>*</columns>
+        <name>WATERMARK</name>
+        <hbdbid>dwv2-production</hbdbid>
+        <sql><![CDATA[select
+MAX(case when PARAMETER_NAME = 'START_DATE' THEN PARAMETER_VALUE ELSE NULL END) START_DATE,
+MAX(case when PARAMETER_NAME = 'DAYS_TO_LOAD' THEN PARAMETER_VALUE ELSE NULL END) DAYS_TO_LOAD
+FROM Etl_process_control 
+where PROCESS_NAME = 'PRICE_MASTER']]></sql>
+        <singleton>true</singleton>
+    </variable>
+</variableconfigs>

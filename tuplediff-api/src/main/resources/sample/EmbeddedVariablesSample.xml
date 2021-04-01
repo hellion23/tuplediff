@@ -1,0 +1,31 @@
+<tuplediff>
+    <name>EZE-OMS-VIEW-COMPARISON</name>
+    <primarykey>DATE_ID</primarykey>
+
+    <left _type="DBStreamConfig">
+        <datasource hbdbid="dwv2-production"/>
+        <sql>
+            <![CDATA[
+            --VARIABLES_START
+            --{
+            --  "variables" : [ {
+            --    "@type" : "SQLVariableConfig",
+            --    "name" : "TODAY",
+            --    "hbdbid" : "dwv2-production",
+            --    "sql" : "select * from DIM_DATE where calendar_date = trunc(sysdate)"
+            --  } ]
+            --}
+            --VARIABLES_END
+                select ${TODAY.PREV_WORKING_DATE_ID} DATE_ID, 'EMPTY' RESULT from dual
+            ]]>
+        </sql>
+    </left>
+    <right _type="DBStreamConfig">
+        <datasource hbdbid="dwv2-production"/>
+        <sql>
+            <![CDATA[
+                select ${TODAY.PREV_WORKING_DATE_ID} DATE_ID, 'EMPTY' RESULT from dual
+            ]]>
+        </sql>
+    </right>
+</tuplediff>
